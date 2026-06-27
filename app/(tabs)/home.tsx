@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import React, { useState, useRef, useMemo, useEffect } from "react";
+import React, { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -13,7 +13,11 @@ import {
   Dimensions,
   StatusBar,
   Pressable,
+  Alert,
 } from "react-native";
+import { router } from "expo-router";
+import { cartStore } from "@/constants/Cartstore";
+import type { Href } from "expo-router";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const DRAWER_WIDTH = 260;
@@ -29,6 +33,11 @@ type FoodItem = {
   name: string;
   image: { uri: string };
   category: string;
+};
+type DrawerItem = {
+  label: string;
+  icon: string;
+  route?: Href;
 };
 
 const CATEGORIES: Category[] = [
@@ -235,11 +244,13 @@ const ALL_ITEMS: FoodItem[] = [
 ];
 
 
-const DRAWER_ITEMS = [
-  { label: "Profile",         icon: "person-outline" },
-  { label: "Wishlist",        icon: "heart-outline" },
-  { label: "Loyalty Points",  icon: "ribbon-outline" },
+const DRAWER_ITEMS: DrawerItem[] = [
+  { label: "Profile", icon: "person-outline", route: "/(tabs)/profile" },
+  { label: "Wishlist", icon: "heart-outline", route: "/(tabs)/wishlist" },
+  { label: "Loyalty Points", icon: "ribbon-outline" },
   { label: "Payment Methods", icon: "card-outline" },
+  {label: "Order History", icon: "receipt-outline" },
+  { label: "Logout", icon: "log-out-outline" },
 ];
 
 function Drawer({
@@ -288,7 +299,33 @@ function Drawer({
           <View style={styles.drawerContent}>
             <Text style={styles.drawerName}>{username}</Text>
             {DRAWER_ITEMS.map((item) => (
-              <TouchableOpacity key={item.label} style={styles.drawerItem} activeOpacity={0.7}>
+              <TouchableOpacity key={item.label} style={styles.drawerItem} activeOpacity={0.7} 
+                onPress={() => {
+                if (item.label === "Logout") {
+                  Alert.alert(
+                    "Logout",
+                    "Are you sure you want to log out?",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Logout",
+                        style: "destructive",
+                        onPress: async () => {
+                          await AsyncStorage.removeItem("currentUserEmail");
+                          onClose();
+                          router.replace("/auth/login");
+                        },
+                      },
+                    ]
+                  );
+                  return;
+                }
+
+              if (item.route) {
+                router.push(item.route);
+              }
+            }}
+              >
                 <Ionicons name={item.icon as any} size={22} color="white" />
                 <Text style={styles.drawerItemLabel}>{item.label}</Text>
               </TouchableOpacity>
@@ -321,10 +358,17 @@ function CategoryTab({
 
 function FoodCard({ item }: { item: FoodItem }) {
   return (
-    <TouchableOpacity style={styles.foodCard} activeOpacity={0.85}>
+    <TouchableOpacity
+      style={styles.foodCard}
+      activeOpacity={0.85}
+      onPress={() =>
+        router.push({
+          pathname: "/products",
+          params: { category: item.category, highlight: item.name },
+        })
+      }
+    >
       <Image source={item.image} style={styles.foodImage} resizeMode="cover" />
-
-      {/* optional overlay label */}
       <View style={styles.foodOverlay}>
         <Text style={styles.foodName}>{item.name}</Text>
       </View>
@@ -337,6 +381,16 @@ export default function HomeScreen() {
     const [activeCategory, setActiveCategory] = useState("food");
     const [searchQuery, setSearchQuery] = useState("");
     const translateX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
+
+    const [totalCartItems, setTotalCartItems] = useState(() => cartStore.getTotalQuantity());
+    
+    const syncCart = useCallback(() => setTotalCartItems(cartStore.getTotalQuantity()), []);
+
+    useEffect(() => {
+      cartStore.load();
+      cartStore.addListener(syncCart);
+      return () => cartStore.removeListener(syncCart);
+    }, [syncCart]);
 
     useEffect(() => {
       AsyncStorage.getItem("currentUserEmail").then(async (email) => {
@@ -377,8 +431,8 @@ export default function HomeScreen() {
     CATEGORIES.find((c) => c.id === activeCategory)?.label + " Menu";
 
     const handleCategoryPress = (id: string) => {
-    setActiveCategory(id);
-    setSearchQuery(""); 
+      setActiveCategory(id);
+      setSearchQuery(""); 
     };
 
     return (
@@ -401,19 +455,29 @@ export default function HomeScreen() {
                   </Text>
                 </View>
 
-                <TouchableOpacity style={styles.cartBtn} activeOpacity={0.8}>
+                <TouchableOpacity
+                  style={styles.cartBtn}
+                  activeOpacity={0.8}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/products",
+                      params: {
+                        category: cartStore.getCartScope()?.category ?? activeCategory,
+                        highlight: cartStore.getCartScope()?.family ?? "",
+                      },
+                    })
+                  }
+                >
                   <Ionicons name="bag-sharp" size={24} color="white" />
-                  <View style={styles.cartBadge}>
-                    <Text style={styles.cartBadgeText}>3</Text>
-                  </View>
+                  {totalCartItems > 0 && (
+                    <View style={styles.cartBadge}>
+                      <Text style={styles.cartBadgeText}>{totalCartItems}</Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
               </View>
 
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                {/* <View style={styles.greeting}>
-                  <Text style={styles.greetingName}>{username}  👋</Text>
-                </View> */}
-
                 <View style={styles.searchWrap}>
                   <View style={styles.searchBox}>
                     <Ionicons name="search" size={16} color="#999" style={styles.searchIcon} />
@@ -553,7 +617,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -4,
     right: -4,
-    backgroundColor: ORANGE,
+    backgroundColor: BLACK,
     width: 18,
     height: 18,
     borderRadius: 9,

@@ -66,3 +66,32 @@ export async function loginUser(
   if (!user.verified) return { error: 'Account not verified. Check your email for the code.' };
   return { success: true, user };
 }
+
+export async function requestPasswordReset(
+  email: string
+): Promise<{ code: string } | { error: string }> {
+  const users = await getAll();
+  const key = email.toLowerCase().trim();
+  if (!users[key]) return { error: 'No account found with that email.' };
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  users[key].verifyCode = code;
+  await saveAll(users);
+  return { code };
+}
+
+export async function resetPassword(
+  email: string,
+  code: string,
+  newPassword: string
+): Promise<{ success: true } | { error: string }> {
+  const users = await getAll();
+  const key = email.toLowerCase().trim();
+  const user = users[key];
+  if (!user) return { error: 'No account found with that email.' };
+  if (user.verifyCode !== code.trim()) return { error: 'Incorrect code. Try again.' };
+  if (newPassword.length < 6) return { error: 'Password must be at least 6 characters.' };
+  users[key].passwordHash = newPassword;
+  users[key].verifyCode = '';
+  await saveAll(users);
+  return { success: true };
+}
