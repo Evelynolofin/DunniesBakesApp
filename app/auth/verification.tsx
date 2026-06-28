@@ -8,16 +8,68 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { verifyUser } from "@/hooks/authstore";
+import { verifyUser, resendCode } from "@/hooks/authstore";
+
+const RESEND_COOLDOWN = 60;
 
 export default function VerifyScreen() {
   const { email } = useLocalSearchParams<{ email: string }>();
   const [digits, setDigits] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [countdown, setCountdown] = useState(RESEND_COOLDOWN);
+  const [canResend, setCanResend] = useState(false);
   const inputs = useRef<(TextInput | null)[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    startCountdown();
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, []);
+
+  const startCountdown = () => {
+    setCanResend(false);
+    setCountdown(RESEND_COOLDOWN);
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current!);
+          setCanResend(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const handleResend = async () => {
+    if (!canResend || resending) return;
+    setResending(true);
+    try {
+      const result = await resendCode(email);
+      setDigits(["", "", "", "", "", ""]);
+      inputs.current[0]?.focus();
+      startCountdown();
+
+      if ("error" in result) {
+        Alert.alert("Failed to resend", result.error);
+      } else {
+        Alert.alert(
+          "New code sent",
+          `Your verification code is:\n\n${result.code}`,
+          [{ text: "OK" }]
+        );
+      }
+    } catch (err) {
+      Alert.alert("Failed to resend", "Please try again.");
+    } finally {
+      setResending(false);
+    }
+  };
 
   const updateDigit = (val: string, idx: number) => {
     const cleaned = val.replace(/[^0-9]/g, "").slice(-1);
@@ -95,15 +147,26 @@ export default function VerifyScreen() {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={{ marginTop: 20 }}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.resend}>
-            Didn't get a code?{" "}
-            <Text style={{ color: "#F6410B" }}>Go back and sign up again</Text>
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.resendWrap}>
+          <Text style={styles.resendLabel}>Didn't receive a code?</Text>
+
+          {canResend ? (
+            <TouchableOpacity onPress={handleResend} disabled={resending} style={styles.resendBtn}>
+              {resending ? (
+                <ActivityIndicator color="#F6410B" size="small" />
+              ) : (
+                <Text style={styles.resendActive}>Resend code</Text>
+              )}
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.countdownWrap}>
+              <Ionicons name="time-outline" size={14} color="#837D7A" />
+              <Text style={styles.countdownText}>
+                Resend in <Text style={styles.countdownNum}>{countdown}s</Text>
+              </Text>
+            </View>
+          )}
+        </View>
       </View>
     </>
   );
@@ -187,10 +250,49 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: 18,
   },
-  resend: {
+
+  resendWrap: {
+    marginTop: 28,
+    alignItems: "center",
+    gap: 10,
+  },
+  resendLabel: {
     fontSize: 13,
     color: "#837D7A",
-    textAlign: "center",
     fontFamily: "Poppins-Regular",
+  },
+  resendBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 100,
+    borderWidth: 1.5,
+    borderColor: "#F6410B",
+    minWidth: 120,
+    alignItems: "center",
+  },
+  resendActive: {
+    color: "#F6410B",
+    fontWeight: "600",
+    fontSize: 14,
+    fontFamily: "Poppins-Bold",
+  },
+  countdownWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: "#F5F5F5",
+    borderRadius: 100,
+  },
+  countdownText: {
+    fontSize: 13,
+    color: "#837D7A",
+    fontFamily: "Poppins-Regular",
+  },
+  countdownNum: {
+    color: "#0A0909",
+    fontWeight: "700",
+    fontFamily: "Poppins-Bold",
   },
 });

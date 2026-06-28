@@ -79,6 +79,18 @@ export async function requestPasswordReset(
   return { code };
 }
 
+export async function resendCode(
+  email: string
+): Promise<{ code: string } | { error: string }> {
+  const users = await getAll();
+  const key = email.toLowerCase().trim();
+  if (!users[key]) return { error: 'No account found with that email.' };
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  users[key].verifyCode = code;
+  await saveAll(users);
+  return { code };
+}
+
 export async function resetPassword(
   email: string,
   code: string,

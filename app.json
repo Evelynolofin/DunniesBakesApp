@@ -4,7 +4,7 @@
     "slug": "Dunnies-Bakes",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/Avatars.png",
+    "icon": "./assets/images/dunnies-logo.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -14,23 +14,24 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/Avatars.png",
-        "backgroundImage": "./assets/images/Avatars.png",
-        "monochromeImage": "./assets/images/Avatars.png"
+        "foregroundImage": "./assets/images/dunnies-logo.png",
+        "backgroundImage": "./assets/images/dunnies-logo.png",
+        "monochromeImage": "./assets/images/dunnies-logo.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.evelynolofin.DunniesBakes"
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/Avatars.png"
+      "favicon": "./assets/images/dunnies-logo.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/Avatars.png",
+          "image": "./assets/images/dunnies-logo.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
@@ -43,6 +44,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "86920ab4-399e-4ca3-afff-c2a539050c1c"
+      }
     }
   }
 }

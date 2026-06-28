@@ -11,16 +11,15 @@ import {
   StatusBar,
   TextInput,
   Modal,
-  Pressable,
   Animated,
-  Dimensions,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
 import { cartStore, CartProduct } from "@/constants/Cartstore";
 import AsyncStorage from "@react-native-async-storage/async-storage"
+import { orderStore } from "@/constants/OrderStore";
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const ORANGE = "#F6410B";
 const BLACK = "#1A1A1A";
 const WHITE = "#FFFFFF";
@@ -31,6 +30,7 @@ const SUCCESS = "#22C55E";
 
 const HOME: Href = "/(tabs)/home";
 const PRODUCTS: Href = "/products"; 
+const ORDERS: Href = "/(tabs)/order";
 
 type DeliveryMethod = "delivery" | "pickup";
 type PaymentMethod  = "card" | "transfer" | "cash";
@@ -164,7 +164,7 @@ function SuccessModal({ visible, total, onDone }: { visible: boolean; total: num
             <Text style={success.refVal}>#{Math.random().toString(36).slice(2, 10).toUpperCase()}</Text>
           </View>
           <TouchableOpacity style={success.btn} onPress={onDone}>
-            <Text style={success.btnText}>Back to Menu</Text>
+            <Text style={success.btnText}>Go to Order</Text>
           </TouchableOpacity>
         </Animated.View>
       </Animated.View>
@@ -182,6 +182,7 @@ const handleBack = () => {
 
 export default function CheckoutScreen({ onClose }: { onClose?: () => void }) {
   const [cart, setCart] = useState<CartProduct[]>(() => cartStore.getItems());
+  const insets = useSafeAreaInsets();
   
   const sync = useCallback(() => setCart(cartStore.getItems()), []);
   useEffect(() => {
@@ -199,10 +200,26 @@ export default function CheckoutScreen({ onClose }: { onClose?: () => void }) {
       const fullName =
         (await AsyncStorage.getItem(`fullName_${email}`)) ?? "";
 
+      const phone =
+        (await AsyncStorage.getItem(`phone_${email}`)) ?? "";
+
+      const address =
+        (await AsyncStorage.getItem(`address_${email}`)) ?? "";
+
+      const city =
+        (await AsyncStorage.getItem(`city_${email}`)) ?? "";
+
+      const state =
+        (await AsyncStorage.getItem(`state_${email}`)) ?? "";
+
       setForm((prev) => ({
         ...prev,
         fullName,
+        phone,
         email,
+        address,
+        city,
+        state,
       }));
     } catch (error) {
       console.log("Failed to load user:", error);
@@ -264,23 +281,53 @@ export default function CheckoutScreen({ onClose }: { onClose?: () => void }) {
 
   function placeOrder() {
     if (!validate()) return;
-
-    setPaidAmount(total);    
+  
+    const newOrder = {
+      id: Date.now().toString(),
+      reference: Math.random().toString(36).slice(2, 10).toUpperCase(),
+      placedAt: new Date().toISOString(),
+      status: "confirmed" as const,
+      items: cart.map((item) => ({
+        id:       item.id,
+        name:     item.name,
+        family:   item.family,
+        price:    item.price,
+        quantity: item.quantity,
+        image:    item.image,
+      })),
+      subtotal,
+      deliveryFee,
+      platformFee: PLATFORM_FEE,
+      total,
+      deliveryMethod,
+      paymentMethod,
+      fullName: form.fullName,
+      phone:    form.phone,
+      email:    form.email,
+      address:  form.address  || undefined,
+      city:     form.city     || undefined,
+      state:    form.state    || undefined,
+      note:     form.note     || undefined,
+    };
+  
+    orderStore.save(newOrder); 
+    orderStore.autoAdvance(newOrder.id, deliveryMethod);
+    setPaidAmount(total);
     setSuccessVisible(true);
     cartStore.clear();
-    }
+  }
 
   function onDone() {
     setSuccessVisible(false);
-    router.replace(HOME);
+    router.replace(ORDERS);
   }
 
   if (cart.length === 0 && !successVisible) {
     return (
       <View style={styles.root}>
-        <StatusBar barStyle="dark-content" backgroundColor={WHITE} />
+        <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => onClose?.()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color={BLACK} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Checkout</Text>
@@ -303,10 +350,9 @@ export default function CheckoutScreen({ onClose }: { onClose?: () => void }) {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={styles.root}>
-        <StatusBar barStyle="dark-content" backgroundColor={WHITE} />
-
+       <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => onClose?.()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color={BLACK} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Checkout</Text>
@@ -567,7 +613,7 @@ export default function CheckoutScreen({ onClose }: { onClose?: () => void }) {
           </View>
         </ScrollView>
 
-        <View style={styles.cta}>
+        <View style={[styles.cta, { paddingBottom: Math.max(insets.bottom, 18) }]}>
           <View style={styles.ctaTop}>
             <Text style={styles.ctaTotalLabel}>Total</Text>
             <Text style={styles.ctaTotal}>₦{total.toLocaleString()}</Text>
@@ -595,7 +641,7 @@ const styles = StyleSheet.create({
 
   header: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 20, paddingTop: 54, paddingBottom: 14,
+    paddingHorizontal: 20, paddingTop: 40, paddingBottom: 14,
     backgroundColor: WHITE, borderBottomWidth: 1, borderBottomColor: BORDER,
   },
   backBtn:     { width: 40, alignItems: "flex-start" },
@@ -641,7 +687,7 @@ const styles = StyleSheet.create({
   cta: {
     position: "absolute", bottom: 0, left: 0, right: 0,
     backgroundColor: WHITE, paddingHorizontal: 20, paddingTop: 14,
-    paddingBottom: Platform.OS === "ios" ? 34 : 18,
+     paddingBottom: 18,
     borderTopWidth: 1, borderTopColor: BORDER,
     shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 12, elevation: 10,
   },

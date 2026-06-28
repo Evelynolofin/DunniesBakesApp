@@ -212,7 +212,7 @@ export default function HomeScreen() {
                 <TextInput
                   placeholder="Password"
                   placeholderTextColor="#837D7A"
-                  secureTextEntry
+                  secureTextEntry = {!showPassword}
                   style={styles.input2}
                   value={password}
                   onChangeText={setPassword}
@@ -263,10 +263,10 @@ const styles = StyleSheet.create({
   topText: {
     position: "absolute",
     bottom: 90,
-    left: 80,
+    width: "100%",
+    textAlign: "center",
     fontFamily: "Sansita-Regular",
     fontSize: 40,
-    fontWeight: "400",
     color: "#F5F5F5",
   },
   gradient: { ...StyleSheet.absoluteFillObject },

@@ -249,36 +249,29 @@ const DRAWER_ITEMS: DrawerItem[] = [
   { label: "Wishlist", icon: "heart-outline", route: "/(tabs)/wishlist" },
   { label: "Loyalty Points", icon: "ribbon-outline" },
   { label: "Payment Methods", icon: "card-outline" },
-  {label: "Order History", icon: "receipt-outline" },
+  {label: "Order History", icon: "receipt-outline", route: "/(tabs)/order" },
   { label: "Logout", icon: "log-out-outline" },
 ];
 
-function Drawer({
-  translateX,
-  onClose,
-  username,
-}: {
-  translateX: Animated.Value;
-  onClose: () => void;
-  username: string;
-}) {
+  function Drawer({ translateX, onClose, username, isOpen}: {
+    translateX: Animated.Value;
+    onClose: () => void;
+    username: string;
+    isOpen: boolean;     
+  }) {
   return (
     <>
-      <Animated.View
-        style={[
-          styles.overlay,
-          {
-            opacity: translateX.interpolate({
-              inputRange: [-DRAWER_WIDTH, 0],
-              outputRange: [0, 0.35],
-            }),
-          },
-        ]}
-        pointerEvents="auto"
-      >
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-      </Animated.View>
-
+      {isOpen && (
+        <Animated.View
+          style={[styles.overlay, { opacity: translateX.interpolate({
+            inputRange: [-DRAWER_WIDTH, 0],
+            outputRange: [0, 0.35],
+          }) }]}
+          pointerEvents={isOpen ? "auto" : "none"}  
+        >
+          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        </Animated.View>
+      )}
       <Animated.View
         style={[
           styles.drawer,
@@ -381,6 +374,7 @@ export default function HomeScreen() {
     const [activeCategory, setActiveCategory] = useState("food");
     const [searchQuery, setSearchQuery] = useState("");
     const translateX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
+    const [drawerOpen, setDrawerOpen] = useState(false);
 
     const [totalCartItems, setTotalCartItems] = useState(() => cartStore.getTotalQuantity());
     
@@ -402,6 +396,7 @@ export default function HomeScreen() {
     }, []);
 
     const openDrawer = () => {
+      setDrawerOpen(true);  
     Animated.spring(translateX, {
         toValue: 0,
         useNativeDriver: true,
@@ -416,7 +411,7 @@ export default function HomeScreen() {
         useNativeDriver: true,
         bounciness: 0,
         speed: 20,
-    }).start();
+    }).start(() => setDrawerOpen(false)); 
     };
 
     const displayedItems = useMemo(() => {
@@ -437,8 +432,7 @@ export default function HomeScreen() {
 
     return (
       <View style={styles.root}>
-          <StatusBar barStyle="dark-content" backgroundColor={WHITE} />
-
+        <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
           <View style={styles.safeArea}>
               <View style={styles.header}>
                 <View style={styles.headerLeft}>
@@ -477,7 +471,7 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               </View>
 
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" nestedScrollEnabled={true}>
                 <View style={styles.searchWrap}>
                   <View style={styles.searchBox}>
                     <Ionicons name="search" size={16} color="#999" style={styles.searchIcon} />
@@ -502,6 +496,7 @@ export default function HomeScreen() {
                   horizontal 
                   showsHorizontalScrollIndicator={false} 
                   contentContainerStyle={styles.catRow}
+                  nestedScrollEnabled={true}
                   >
                   {CATEGORIES.map((cat) => (
                     <CategoryTab
@@ -534,7 +529,7 @@ export default function HomeScreen() {
               </ScrollView>
           </View>
 
-          <Drawer translateX={translateX} onClose={closeDrawer} username={username} />
+          <Drawer translateX={translateX} onClose={closeDrawer} username={username} isOpen={drawerOpen} />
       </View>
     )
 }

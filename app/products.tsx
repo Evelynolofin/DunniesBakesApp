@@ -13,9 +13,12 @@ import {
   TextInput,
   Modal,
   Pressable,
+  Platform,
 } from "react-native";
 import { cartStore, CartProduct } from "@/constants/Cartstore";
 import CheckoutScreen from "@/components/Checkout";
+import { wishlistStore } from "@/constants/Wishliststore";
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const ORANGE = "#F6410B";
@@ -35,8 +38,6 @@ type Product = {
 };
 
 type CartItem = Product & { quantity: number };
-
-const { edit } = useLocalSearchParams();
 
 const ALL_PRODUCTS: Product[] = [
   { id: "pz1", name: "Margherita Pizza",      family: "Pizza",        category: "food",    price: 3500, tag: "Popular", description: "Classic tomato base with fresh mozzarella and basil.",              image: { uri: "https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=400" } },
@@ -216,7 +217,12 @@ function ConflictModal({
   onCancel: () => void;
 }) {
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      statusBarTranslucent   
+    >
       <Pressable style={conflict.backdrop} onPress={onCancel} />
       <View style={conflict.box}>
         <Text style={conflict.title}>Start new order?</Text>
@@ -242,10 +248,17 @@ function CartSheet({
   onRemove: (id: string) => void; onCheckout: () => void;
 }) {
   const total = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  const insets = useSafeAreaInsets();
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      statusBarTranslucent 
+      onRequestClose={onClose}
+    >
       <Pressable style={sheet.backdrop} onPress={onClose} />
-      <View style={sheet.container}>
+      <View style={[sheet.container, { paddingBottom: Math.max(insets.bottom + 8, 24) }]}>
         <View style={sheet.handle} />
         <Text style={sheet.title}>Your Cart</Text>
         {cart.length === 0 ? (
@@ -300,6 +313,17 @@ function ProductCard({
   onIncrease: (id: string) => void;
   onDecrease: (id: string) => void;
 }) {
+  const [wishlisted, setWishlisted] = React.useState(false);
+ 
+  React.useEffect(() => {
+    wishlistStore.isWishlisted(item.id).then(setWishlisted);
+  }, [item.id]);
+ 
+  async function toggleWishlist() {
+    const action = await wishlistStore.toggle(item);
+    setWishlisted(action === "added");
+  }
+ 
   return (
     <View style={card.wrap}>
       <View style={card.imageWrap}>
@@ -309,6 +333,13 @@ function ProductCard({
             <Text style={card.tagText}>{item.tag}</Text>
           </View>
         )}
+        <TouchableOpacity style={card.heartBtn} onPress={toggleWishlist} activeOpacity={0.8}>
+          <Ionicons
+            name={wishlisted ? "heart" : "heart-outline"}
+            size={14}
+            color={wishlisted ? ORANGE : "#CCC"}
+          />
+        </TouchableOpacity>
       </View>
       <View style={card.info}>
         <Text style={card.name} numberOfLines={1}>{item.name}</Text>
@@ -350,6 +381,7 @@ export default function ProductsScreen() {
 
   const [pendingProduct, setPendingProduct] = useState<Product | null>(null);
   const [conflictMsg,    setConflictMsg]    = useState("");
+  const insets = useSafeAreaInsets();
 
   const sync = useCallback(() => setCart(cartStore.getItems()), []);
 
@@ -409,8 +441,11 @@ export default function ProductsScreen() {
   
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor={WHITE} />
-
+      <StatusBar 
+        translucent={Platform.OS === 'ios'} 
+        backgroundColor={Platform.OS === 'android' ? WHITE : 'transparent'} 
+        barStyle="dark-content" 
+      />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={BLACK} />
@@ -470,7 +505,7 @@ export default function ProductsScreen() {
       </ScrollView>
 
       {totalItems > 0 && (
-        <TouchableOpacity style={styles.floatingCart} onPress={() => setCartVisible(true)}>
+        <TouchableOpacity  style={[styles.floatingCart, { bottom: Math.max(insets.bottom + 12, 24) }]} onPress={() => setCartVisible(true)}>
           <View style={styles.floatingLeft}>
             <View style={styles.floatingBadge}>
               <Text style={styles.floatingBadgeText}>{totalItems}</Text>
@@ -503,6 +538,7 @@ export default function ProductsScreen() {
       <Modal
         visible={checkoutVisible}
         animationType="slide"
+        statusBarTranslucent 
         onRequestClose={() => setCheckoutVisible(false)}
       >
         <CheckoutScreen onClose={() => setCheckoutVisible(false)} />
@@ -515,7 +551,8 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: LIGHT_BG },
   header: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 20, paddingTop: 54, paddingBottom: 12, backgroundColor: WHITE,
+    paddingHorizontal: 20, paddingBottom: 12, backgroundColor: WHITE, paddingTop: 50
+
   },
   backBtn: { padding: 4 },
   headerTitle: { fontSize: 18, fontWeight: "700", color: BLACK, flex: 1, textAlign: "center" },
@@ -544,7 +581,7 @@ const styles = StyleSheet.create({
     backgroundColor: ORANGE, borderRadius: 16, paddingHorizontal: 20,
     paddingVertical: 14, flexDirection: "row", alignItems: "center",
     justifyContent: "space-between", shadowColor: ORANGE,
-    shadowOpacity: 0.4, shadowRadius: 12, elevation: 8,
+    shadowOpacity: 0.4, shadowRadius: 12, elevation: 8,marginBottom: 15
   },
   floatingLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
   floatingBadge: {
@@ -574,6 +611,13 @@ const card = StyleSheet.create({
   addBtn: {
     flexDirection: "row", alignItems: "center", backgroundColor: ORANGE,
     borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, gap: 2,
+  },
+  heartBtn: {
+    position: "absolute", top: 6, right: 6,
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: WHITE,
+    alignItems: "center", justifyContent: "center",
+    shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 3, elevation: 3,
   },
   addText: { color: WHITE, fontSize: 13, fontWeight: "700" },
   qtyControl: { flexDirection: "row", alignItems: "center", backgroundColor: ORANGE, borderRadius: 10, overflow: "hidden" },

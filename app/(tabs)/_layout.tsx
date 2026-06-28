@@ -19,11 +19,11 @@ export default function TabLayout() {
       />
 
       <Tabs.Screen
-        name="search"
+        name="order"
         options={{
-          title: "Search",
+          title: "Order",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="search" size={size} color={color} />
+            <Ionicons name="receipt-outline" size={size} color={color} />
           ),
         }}
       />

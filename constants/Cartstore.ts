@@ -65,7 +65,6 @@ class CartStore {
     return this.items.reduce((s, i) => s + i.price * i.quantity, 0);
   }
 
-  /** Returns the category + family currently in the cart, or null if empty. */
   getCartScope(): { category: string; family: string } | null {
     if (this.items.length === 0) return null;
     return { category: this.items[0].category, family: this.items[0].family };
@@ -85,7 +84,6 @@ class CartStore {
     return "added";
   }
 
-  /** Clears cart then adds the item — call after user confirms replacement. */
   forceAdd(product: Omit<CartProduct, "quantity">) {
     const idx = this.items.findIndex((i) => i.id === product.id);
     if (idx >= 0) {
