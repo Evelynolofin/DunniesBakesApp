@@ -427,7 +427,7 @@ export default function ProfileScreen() {
         style: "destructive",
         onPress: async () => {
           await AsyncStorage.removeItem("currentUserEmail");
-          router.replace("/login" as any);
+          router.replace("/auth/login" as any);
         },
       },
     ]);
