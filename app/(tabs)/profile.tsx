@@ -15,9 +15,19 @@ import {
   Switch,
   Alert,
   KeyboardAvoidingView,
+  Linking,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { orderStore } from "@/constants/OrderStore";
+import { cartStore } from "@/constants/Cartstore";
+import { wishlistStore } from "@/constants/Wishliststore";
+import {
+  requestNotificationPermission,
+  getNotificationPrefs,
+  setNotificationPrefs,
+  clearCurrentUserNotificationData,
+} from "@/constants/Notificationservice";
+import * as Notifications from "expo-notifications";
 
 const ORANGE   = "#F6410B";
 const BLACK    = "#1A1A1A";
@@ -83,13 +93,14 @@ function ModalField({
 }
 
 function SettingToggle({
-  icon, label, sub, value, onChange, iconBg,
+  icon, label, sub, value, onChange, iconBg, disabled,
 }: {
   icon: string; label: string; sub?: string;
   value: boolean; onChange: (v: boolean) => void; iconBg: string;
+  disabled?: boolean;
 }) {
   return (
-    <View style={row.wrap}>
+    <View style={[row.wrap, disabled && { opacity: 0.45 }]}>
       <View style={[row.iconBox, { backgroundColor: iconBg }]}>
         <Ionicons name={icon as any} size={18} color={WHITE} />
       </View>
@@ -100,6 +111,7 @@ function SettingToggle({
       <Switch
         value={value}
         onValueChange={onChange}
+        disabled={disabled}
         trackColor={{ false: BORDER, true: ORANGE }}
         thumbColor={WHITE}
         ios_backgroundColor={BORDER}
@@ -375,13 +387,26 @@ export default function ProfileScreen() {
       const city     = (await AsyncStorage.getItem(`city_${email}`))      ?? "";
       const state    = (await AsyncStorage.getItem(`state_${email}`))     ?? "";
 
-      const savedSettings = await AsyncStorage.getItem(`settings_${email}`);
-      if (savedSettings) setSettings(JSON.parse(savedSettings));
-
       setProfile({ fullName, email, phone, address, city, state });
     } catch (e) {
       console.error("loadProfile failed", e);
     }
+  }, []);
+
+  const loadNotificationSettings = useCallback(async () => {
+    try {
+      const prefs = await getNotificationPrefs();
+      const { status } = await Notifications.getPermissionsAsync();
+      const osGranted = status === "granted";
+
+      const effectiveNotifications = prefs.notifications && osGranted;
+
+      setSettings((prev) => ({
+        ...prev,
+        notifications: effectiveNotifications,
+        orderUpdates:  prefs.orderUpdates,
+      }));
+    } catch {}
   }, []);
 
   const loadOrderCount = useCallback(async () => {
@@ -392,6 +417,7 @@ export default function ProfileScreen() {
   useEffect(() => {
     loadProfile();
     loadOrderCount();
+    loadNotificationSettings();
     orderStore.addListener(loadOrderCount);
     return () => orderStore.removeListener(loadOrderCount);
   }, []);
@@ -411,7 +437,35 @@ export default function ProfileScreen() {
     }
   }
 
-  async function toggleSetting(key: keyof Settings, val: boolean) {
+  async function handleToggleNotifications(val: boolean) {
+    if (val) {
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        setSettings((prev) => ({ ...prev, notifications: false }));
+        Alert.alert(
+          "Notifications Disabled",
+          "Enable notifications for Dunnies Kitchen in your phone's Settings app to receive order updates.",
+          [
+            { text: "Not Now", style: "cancel" },
+            { text: "Open Settings", onPress: () => Linking.openSettings() },
+          ]
+        );
+        return;
+      }
+      const updated = await setNotificationPrefs({ notifications: true });
+      setSettings((prev) => ({ ...prev, notifications: true, orderUpdates: updated.orderUpdates }));
+    } else {
+      await setNotificationPrefs({ notifications: false });
+      setSettings((prev) => ({ ...prev, notifications: false }));
+    }
+  }
+
+  async function handleToggleOrderUpdates(val: boolean) {
+    await setNotificationPrefs({ orderUpdates: val });
+    setSettings((prev) => ({ ...prev, orderUpdates: val }));
+  }
+
+  async function toggleSetting(key: "promoEmails" | "darkMode" | "saveAddress", val: boolean) {
     const updated = { ...settings, [key]: val };
     setSettings(updated);
     try {
@@ -426,6 +480,8 @@ export default function ProfileScreen() {
         text: "Log out",
         style: "destructive",
         onPress: async () => {
+          cartStore.resetInMemory();
+          wishlistStore.resetInMemory();
           await AsyncStorage.removeItem("currentUserEmail");
           router.replace("/auth/login" as any);
         },
@@ -444,6 +500,9 @@ export default function ProfileScreen() {
         delete users[key];
         await AsyncStorage.setItem("dunnies_users", JSON.stringify(users));
         }
+
+        await clearCurrentUserNotificationData();
+        await cartStore.clearForCurrentUser();
 
         await AsyncStorage.multiRemove([
         "currentUserEmail",
@@ -558,13 +617,18 @@ export default function ProfileScreen() {
             icon="notifications-outline" label="Push Notifications"
             sub="Order confirmations and alerts"
             iconBg={ORANGE} value={settings.notifications}
-            onChange={(v) => toggleSetting("notifications", v)}
+            onChange={handleToggleNotifications}
           />
           <SettingToggle
             icon="bicycle-outline" label="Order Updates"
-            sub="Live status as your order moves"
+            sub={
+              settings.notifications
+                ? "Live status as your order moves"
+                : "Enable push notifications first"
+            }
             iconBg="#22C55E" value={settings.orderUpdates}
-            onChange={(v) => toggleSetting("orderUpdates", v)}
+            onChange={handleToggleOrderUpdates}
+            disabled={!settings.notifications}
           />
           <SettingToggle
             icon="pricetag-outline" label="Promotions & Offers"
@@ -592,13 +656,13 @@ export default function ProfileScreen() {
           />
           <NavRow
             icon="star-outline" label="Rate the App"
-            sub="Enjoying Chop Chop? Let us know"
+            sub="Enjoying Dunnies Kitchen? Let us know"
             iconBg="#F59E0B"
             onPress={() => Alert.alert("Rate App", "Thank you! This would open the app store.")}
           />
           <NavRow
             icon="information-circle-outline" label="App Version"
-            sub="Chop Chop v1.0.0"
+            sub="Dunnies Kitchen v1.0.0"
             iconBg={MUTED}
             onPress={() => {}}
             rightLabel="1.0.0"

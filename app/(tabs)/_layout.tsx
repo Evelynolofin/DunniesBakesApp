@@ -1,7 +1,18 @@
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useEffect } from "react";
+import * as NavigationBar from "expo-navigation-bar";
+import { Platform } from "react-native";
 
 export default function TabLayout() {
+  useEffect(() => {
+    if (Platform.OS === "android") {
+      NavigationBar.setPositionAsync("absolute"); 
+      NavigationBar.setBackgroundColorAsync("#ffffff01"); 
+      NavigationBar.setButtonStyleAsync("dark");
+    }
+  }, []);
+
   return (
     <Tabs
       screenOptions={{

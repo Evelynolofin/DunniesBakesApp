@@ -12,6 +12,7 @@ import {
   Platform,
   Modal,
   Pressable,
+  Alert,
 } from "react-native";
 import { orderStore, Order, OrderStatus } from "@/constants/OrderStore";
 
@@ -78,6 +79,7 @@ const STATUS_CONFIG: Record<OrderStatus, StatusConfig> = {
   },
 };
 
+const CANCELLABLE_STATUSES: OrderStatus[] = ["confirmed"];
 
 const DELIVERY_STEPS: OrderStatus[] = [
   "confirmed",
@@ -207,13 +209,33 @@ function OrderTimeline({
 function OrderDetailModal({
   order,
   onClose,
+  onCancel
 }: {
   order: Order | null;
   onClose: () => void;
+  onCancel: (id: string) => void;
 }) {
   if (!order) return null;
-  const cfg = STATUS_CONFIG[order.status];
+  const canCancel = CANCELLABLE_STATUSES.includes(order.status);
 
+  function handleCancel() {
+    if (!order) return;
+    Alert.alert(
+      "Cancel Order",
+      "Are you sure you want to cancel this order? This cannot be undone.",
+      [
+        { text: "Keep Order", style: "cancel" },
+        {
+          text: "Yes, Cancel",
+          style: "destructive",
+          onPress: () => {
+            onCancel(order.id);
+            onClose();
+          },
+        },
+      ]
+    );
+  }
   return (
     <Modal
       visible={!!order}
@@ -273,7 +295,7 @@ function OrderDetailModal({
               <Text style={detail.infoVal}>
                 {order.deliveryMethod === "delivery"
                   ? "🚚 Home Delivery"
-                  : "🏪 Self Pickup"}
+                  : "🛍️ Self Pickup"}
               </Text>
             </View>
             <View style={detail.infoRow}>
@@ -341,6 +363,33 @@ function OrderDetailModal({
             </View>
           </View>
 
+          {canCancel && (
+            <TouchableOpacity
+              style={detail.cancelBtn}
+              onPress={handleCancel}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="close-circle-outline" size={18} color="#EF4444" />
+              <Text style={detail.cancelBtnText}>Cancel Order</Text>
+            </TouchableOpacity>
+          )}
+
+          {!canCancel &&
+            order.status !== "cancelled" &&
+            order.status !== "delivered" && (
+              <View style={detail.cancelNote}>
+                <Ionicons
+                  name="information-circle-outline"
+                  size={15}
+                  color={MUTED}
+                />
+                <Text style={detail.cancelNoteText}>
+                  This order can no longer be cancelled as it's already being
+                  prepared.
+                </Text>
+              </View>
+          )}
+
           <View style={{ height: 32 }} />
         </ScrollView>
       </View>
@@ -367,7 +416,7 @@ function OrderCard({
     >
       <View style={card.top}>
         <View>
-          <Text style={card.ref}>#{order.reference}</Text>
+          <Text style={card.ref}>Order ID: #{order.reference}</Text>
           <Text style={card.time}>{timeAgo(order.placedAt)}</Text>
         </View>
         <StatusBadge status={order.status} />
@@ -416,7 +465,7 @@ function OrderCard({
 
       <View style={card.footer}>
         <Text style={card.footerMeta}>
-          {order.deliveryMethod === "delivery" ? "🚚 Delivery" : "🏪 Pickup"} ·{" "}
+          {order.deliveryMethod === "delivery" ? "🚚 Delivery" : "🛍️ Pickup"} ·{" "}
           {order.items.length} item{order.items.length > 1 ? "s" : ""}
         </Text>
         <View style={card.viewBtn}>
@@ -456,6 +505,10 @@ export default function OrdersScreen() {
     return () => orderStore.removeListener(load);
   }, [load]);
 
+  async function handleCancel(id: string) {
+    await orderStore.updateStatus(id, "cancelled");
+  }
+
   const filtered = orders.filter((o) => {
     if (filter === "all")       return true;
     if (filter === "active")    return !["delivered", "cancelled"].includes(o.status);
@@ -481,27 +534,28 @@ export default function OrdersScreen() {
         )}
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.tabsWrap}
-        style={styles.tabsScroll}
-      >
-        {FILTER_TABS.map((tab) => (
-          <TouchableOpacity
-            key={tab.key}
-            style={[styles.tab, filter === tab.key && styles.tabActive]}
-            onPress={() => setFilter(tab.key)}
-            activeOpacity={0.8}
-          >
-            <Text
-              style={[styles.tabText, filter === tab.key && styles.tabTextActive]}
+      <View style={styles.tabsContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabsWrap}
+        >
+          {FILTER_TABS.map((tab) => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[styles.tab, filter === tab.key && styles.tabActive]}
+              onPress={() => setFilter(tab.key)}
+              activeOpacity={0.8}
             >
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+              <Text
+                style={[styles.tabText, filter === tab.key && styles.tabTextActive]}
+              >
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
       {loading ? (
         <View style={styles.emptyWrap}>
@@ -555,6 +609,7 @@ export default function OrdersScreen() {
       <OrderDetailModal
         order={selected}
         onClose={() => setSelectedId(null)}
+        onCancel={handleCancel}
       />
     </View>
   );
@@ -578,18 +633,32 @@ const styles = StyleSheet.create({
   activePill:     { backgroundColor: "#FFF0ED", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
   activePillText: { fontSize: 12, fontWeight: "700", color: ORANGE },
 
-  tabsScroll: { backgroundColor: WHITE, maxHeight: 52 },
-  tabsWrap: {
-    flexGrow: 1,
-    flexDirection: "row",
+  tabsContainer: {
+    height: 52,
+    backgroundColor: WHITE,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
     justifyContent: "center",
+  },
+  
+  tabsWrap: {
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    minWidth: "100%",
+    paddingHorizontal: 12,
     paddingVertical: 10,
     gap: 8,
-    },
-  tab:        { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, backgroundColor: LIGHT_BG },
-  tabActive:  { backgroundColor: ORANGE },
-  tabText:    { fontSize: 13, fontWeight: "600", color: MUTED },
+  },
+  tab: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: LIGHT_BG,
+    flexShrink: 0,
+  },
+  tabActive:     { backgroundColor: ORANGE },
+  tabText:       { fontSize: 13, fontWeight: "600", color: MUTED },
   tabTextActive: { color: WHITE },
 
   list: { paddingHorizontal: 16, paddingTop: 14 },
@@ -677,4 +746,28 @@ const detail = StyleSheet.create({
   divider:     { height: 1, backgroundColor: BORDER, marginVertical: 8 },
   totalLabel:  { fontSize: 16, fontWeight: "700", color: BLACK },
   totalVal:    { fontSize: 16, fontWeight: "700", color: ORANGE },
+  cancelBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 8,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#EF4444",
+    backgroundColor: "#FEF2F2",
+  },
+  cancelBtnText: { fontSize: 15, fontWeight: "700", color: "#EF4444" },
+
+  cancelNote: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: LIGHT_BG,
+    borderRadius: 12,
+  },
+  cancelNoteText: { flex: 1, fontSize: 12, color: MUTED, lineHeight: 18 },
 });

@@ -16,6 +16,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import {Ionicons} from "@expo/vector-icons";
 import { createUser, loginUser } from "@/hooks/authstore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { notifyLoginSuccess, notifySignUp } from "@/constants/Notificationservice";
+import { cartStore } from "@/constants/Cartstore";
+import { wishlistStore } from "@/constants/Wishliststore";
 
 type TabType = "Login" | "Sign Up";
 
@@ -40,11 +43,14 @@ export default function HomeScreen() {
     if ("error" in result) {
       Alert.alert("Login failed", result.error);
     } else {
-      await AsyncStorage.setItem(`fullName_${result.user.email}`, result.user.fullName)
-      await AsyncStorage.setItem("currentUserEmail", result.user.email)
+      await AsyncStorage.setItem(`fullName_${result.user.email}`, result.user.fullName);
+      await AsyncStorage.setItem("currentUserEmail", result.user.email);
+      await cartStore.reloadForCurrentUser();
+      await wishlistStore.reloadForCurrentUser(); 
+      await notifyLoginSuccess(result.user.fullName);
       router.replace("/(tabs)/home");
     }
-  }
+  };
   
   const handleSignUp = async () => {
     if (!fullName.trim() || !email.trim() || !password || !confirmPass) {
@@ -65,9 +71,12 @@ export default function HomeScreen() {
     if ("error" in result) {
       Alert.alert("Sign up failed", result.error);
     } else {
-      const normalizedEmail = email.toLowerCase().trim()
-      await AsyncStorage.setItem(`fullName_${normalizedEmail}`, fullName)
-      await AsyncStorage.setItem("currentUserEmail", normalizedEmail)
+      const normalizedEmail = email.toLowerCase().trim();
+      await AsyncStorage.setItem(`fullName_${normalizedEmail}`, fullName);
+      await AsyncStorage.setItem("currentUserEmail", normalizedEmail);
+      await cartStore.reloadForCurrentUser();
+      await wishlistStore.reloadForCurrentUser();
+      await notifySignUp(fullName);
       Alert.alert(
         "Verify your email",
         `Your verification code is: ${result.code}\n\n(In production this would be emailed to you.)`,
@@ -77,13 +86,14 @@ export default function HomeScreen() {
             onPress: () =>
               router.push({
                 pathname: "/auth/verification",
-                params: { email: email.toLowerCase().trim() },
+                params: { email: normalizedEmail },
               }),
           },
         ]
       );
     }
-  }
+  };
+ 
 
   return (
     <>
@@ -102,7 +112,7 @@ export default function HomeScreen() {
             style={styles.gradient}
           />
 
-          <Text style={styles.topText}>Dunnies Bakes</Text>
+          <Text style={styles.topText}>Dunnies Kitchen</Text>
         </View>
 
         <View style={styles.container}>

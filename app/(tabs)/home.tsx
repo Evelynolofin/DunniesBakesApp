@@ -14,10 +14,20 @@ import {
   StatusBar,
   Pressable,
   Alert,
+  AppState,
+  AppStateStatus,
 } from "react-native";
 import { router } from "expo-router";
 import { cartStore } from "@/constants/Cartstore";
 import type { Href } from "expo-router";
+import * as Notifications from "expo-notifications";
+import {
+  getUnreadCount,
+  markAllRead,
+  requestNotificationPermission,
+} from "@/constants/Notificationservice";
+import { wishlistStore } from "@/constants/Wishliststore";
+
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const DRAWER_WIDTH = 260;
@@ -238,7 +248,7 @@ const ALL_ITEMS: FoodItem[] = [
   },
   {
     id: "dr4", name: "Milkshake",
-    image: { uri: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400" },
+    image: { uri: "https://plus.unsplash.com/premium_photo-1695868328902-b8a3b093da74?q=80&w=987&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" },
     category: "drinks",
   },
 ];
@@ -305,6 +315,8 @@ const DRAWER_ITEMS: DrawerItem[] = [
                         style: "destructive",
                         onPress: async () => {
                           await AsyncStorage.removeItem("currentUserEmail");
+                          await cartStore.clearForCurrentUser();
+                          await wishlistStore.resetInMemory();
                           onClose();
                           router.replace("/auth/login");
                         },
@@ -375,10 +387,17 @@ export default function HomeScreen() {
     const [searchQuery, setSearchQuery] = useState("");
     const translateX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
     const [drawerOpen, setDrawerOpen] = useState(false);
+    const [unreadCount,    setUnreadCount]    = useState(0);
 
+    const appState   = useRef<AppStateStatus>(AppState.currentState);
     const [totalCartItems, setTotalCartItems] = useState(() => cartStore.getTotalQuantity());
     
     const syncCart = useCallback(() => setTotalCartItems(cartStore.getTotalQuantity()), []);
+
+    const refreshUnread = useCallback(async () => {
+      const count = await getUnreadCount();
+      setUnreadCount(count);
+    }, []);
 
     useEffect(() => {
       cartStore.load();
@@ -393,7 +412,39 @@ export default function HomeScreen() {
           if (name) setUsername(name)
         }
       })
+      requestNotificationPermission();
+      refreshUnread();
     }, []);
+
+    useEffect(() => {
+      const sub = AppState.addEventListener("change", (next: AppStateStatus) => {
+        if (appState.current.match(/inactive|background/) && next === "active") {
+          refreshUnread();
+        }
+        appState.current = next;
+      });
+      return () => sub.remove();
+    }, [refreshUnread]);
+  
+    useEffect(() => {
+      const sub = Notifications.addNotificationReceivedListener(() => {
+        refreshUnread();
+      });
+      return () => sub.remove();
+    }, [refreshUnread]);
+  
+    useEffect(() => {
+      const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+        const data = response.notification.request.content.data as Record<string, string> | undefined;
+        if (data?.screen === "order") {
+          router.push("/(tabs)/order" as any);
+        } else {
+          router.push("/Notifications" as any);
+        }
+      });
+      return () => sub.remove();
+    }, []);
+  
 
     const openDrawer = () => {
       setDrawerOpen(true);  
@@ -449,26 +500,51 @@ export default function HomeScreen() {
                   </Text>
                 </View>
 
-                <TouchableOpacity
-                  style={styles.cartBtn}
-                  activeOpacity={0.8}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/products",
-                      params: {
-                        category: cartStore.getCartScope()?.category ?? activeCategory,
-                        highlight: cartStore.getCartScope()?.family ?? "",
-                      },
-                    })
-                  }
-                >
-                  <Ionicons name="bag-sharp" size={24} color="white" />
-                  {totalCartItems > 0 && (
-                    <View style={styles.cartBadge}>
-                      <Text style={styles.cartBadgeText}>{totalCartItems}</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
+                <View style={styles.headerRight}>
+                  {/* ── Notification bell ── */}
+                  <TouchableOpacity
+                    style={styles.bellBtn}
+                    activeOpacity={0.8}
+                    onPress={async () => {
+                      router.push("/Notifications" as any);
+                      if (unreadCount > 0) {
+                        await markAllRead();
+                        setUnreadCount(0);
+                      }
+                    }}
+                  >
+                    <Ionicons name="notifications-outline" size={24} color={BLACK} />
+                    {unreadCount > 0 && (
+                      <View style={styles.bellBadge}>
+                        <Text style={styles.bellBadgeText}>
+                          {unreadCount > 9 ? "9+" : unreadCount}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+      
+                  {/* Cart button */}
+                  <TouchableOpacity
+                    style={styles.cartBtn}
+                    activeOpacity={0.8}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/products",
+                        params: {
+                          category: cartStore.getCartScope()?.category ?? activeCategory,
+                          highlight: cartStore.getCartScope()?.family ?? "",
+                        },
+                      })
+                    }
+                  >
+                    <Ionicons name="bag-sharp" size={24} color="white" />
+                    {totalCartItems > 0 && (
+                      <View style={styles.cartBadge}>
+                        <Text style={styles.cartBadgeText}>{totalCartItems}</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
 
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" nestedScrollEnabled={true}>
@@ -584,11 +660,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingTop: 50,
+    paddingBottom: 10
   },
 
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
+  },
+
+  headerRight: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 10 
   },
 
   headerName: {
@@ -599,6 +682,23 @@ const styles = StyleSheet.create({
   },
 
   menuBtn: { gap: 5, justifyContent: "center" },
+
+  bellBtn: {
+    width: 44, height: 44, borderRadius: 14,
+    alignItems: "center", justifyContent: "center",
+    backgroundColor: WHITE,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07, shadowRadius: 4, elevation: 2,
+  },
+  bellBadge: {
+    position: "absolute", top: -4, right: -4,
+    backgroundColor: ORANGE,
+    minWidth: 18, height: 18, borderRadius: 9,
+    alignItems: "center", justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  bellBadgeText: { color: WHITE, fontSize: 10, fontWeight: "700" },
+
   cartBtn: {
     backgroundColor: ORANGE,
     width: 44,

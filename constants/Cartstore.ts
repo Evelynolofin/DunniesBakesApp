@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const CART_KEY = "app_cart_v1";
+const CURRENT_USER_KEY = "currentUserEmail";
+const GUEST_SCOPE       = "guest";
 
 export type CartProduct = {
   id: string;
@@ -16,25 +17,50 @@ export type CartProduct = {
 
 type Listener = () => void;
 
+async function getUserScope(): Promise<string> {
+  try {
+    const email = await AsyncStorage.getItem(CURRENT_USER_KEY);
+    return email ? email.toLowerCase().trim() : GUEST_SCOPE;
+  } catch {
+    return GUEST_SCOPE;
+  }
+}
+
+function cartKeyFor(scope: string): string {
+  return `app_cart_v1_${scope}`;
+}
+
 class CartStore {
   private items: CartProduct[] = [];
   private listeners: Set<Listener> = new Set();
-  private loaded = false;
 
+  private loadedScope: string | null = null;
   async load() {
-    if (this.loaded) return;
+    const scope = await getUserScope();
+
+    if (this.loadedScope === scope) return; 
+
     try {
-      const raw = await AsyncStorage.getItem(CART_KEY);
-      if (raw) this.items = JSON.parse(raw);
-    } catch (_) {}
-    this.loaded = true;
+      const raw = await AsyncStorage.getItem(cartKeyFor(scope));
+      this.items = raw ? JSON.parse(raw) : [];
+    } catch {
+      this.items = [];
+    }
+
+    this.loadedScope = scope;
     this.notify();
+  }
+
+  async reloadForCurrentUser() {
+    this.loadedScope = null;
+    await this.load();
   }
 
   private async save() {
     try {
-      await AsyncStorage.setItem(CART_KEY, JSON.stringify(this.items));
-    } catch (_) {}
+      const scope = this.loadedScope ?? (await getUserScope());
+      await AsyncStorage.setItem(cartKeyFor(scope), JSON.stringify(this.items));
+    } catch {}
   }
 
   addListener(fn: Listener) {
@@ -132,6 +158,22 @@ class CartStore {
   clear() {
     this.items = [];
     this.save();
+    this.notify();
+  }
+
+  resetInMemory() {
+    this.items = [];
+    this.loadedScope = null;
+    this.notify();
+  }
+
+  async clearForCurrentUser() {
+    const scope = await getUserScope();
+    try {
+      await AsyncStorage.removeItem(cartKeyFor(scope));
+    } catch {}
+    this.items = [];
+    this.loadedScope = null;
     this.notify();
   }
 }

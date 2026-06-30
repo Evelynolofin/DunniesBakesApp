@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Dunnies Bakes",
-    "slug": "Dunnies-Bakes",
+    "name": "Dunnies Kitchen",
+    "slug": "Dunnies-Kitchen",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/dunnies-logo.png",
@@ -20,7 +20,8 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.evelynolofin.DunniesBakes"
+      "package": "com.evelynolofin.DunniesKitchen",
+      "navigationBarColor": "#00000000"
     },
     "web": {
       "output": "static",
@@ -39,6 +40,14 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "expo-navigation-bar",
+        {
+          "visible": "immersive",
+          "backgroundColor": "#00000000",
+          "barStyle": "dark"
+        }
       ]
     ],
     "experiments": {
@@ -47,15 +56,21 @@
     },
     "extra": {
       "router": {},
+      "expo-navigation-bar": {
+        "visible": "immersive",
+        "backgroundColor": "#00000000",
+        "barStyle": "dark"
+      },
       "eas": {
-        "projectId": "86920ab4-399e-4ca3-afff-c2a539050c1c"
+        "projectId": "002fdf9f-2a61-4d80-96f2-8e3fce7d546c"
       }
     },
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/86920ab4-399e-4ca3-afff-c2a539050c1c"
-    }
+      "url": "https://u.expo.dev/002fdf9f-2a61-4d80-96f2-8e3fce7d546c"
+    },
+    "owner": "evelynolofin"
   }
 }

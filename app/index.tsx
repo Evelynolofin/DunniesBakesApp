@@ -3,20 +3,28 @@ import { useEffect, useRef } from 'react';
 import {StatusBar, Text, View, Image, Animated,
   StyleSheet
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function Index() {
   const hasNavigated = useRef(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       if (!hasNavigated.current) {
         hasNavigated.current = true;
-        router.replace("/auth/login");
+
+        const currentUserEmail = await AsyncStorage.getItem('currentUserEmail');
+        if (currentUserEmail) {
+          router.replace('/(tabs)/home');
+        } else {
+          router.replace('/auth/login');
+        }
       }
     }, 3700);
 
     return () => clearTimeout(timer);
   }, []);
+
   return (
     <>
     <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
@@ -27,7 +35,7 @@ export default function Index() {
       /> 
       <Animated.View style={{marginTop: 20}}>
         <Image
-          source={require("@/assets/images/dunnies_bakes.gif")}
+          source={require("@/assets/images/dunnies_kitchen.gif")}
           style={{width: 350, height: 60}}
         />
       </Animated.View>

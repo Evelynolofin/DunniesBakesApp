@@ -280,42 +280,43 @@ export default function CheckoutScreen({ onClose }: { onClose?: () => void }) {
   }
 
   function placeOrder() {
-    if (!validate()) return;
-  
-    const newOrder = {
-      id: Date.now().toString(),
-      reference: Math.random().toString(36).slice(2, 10).toUpperCase(),
-      placedAt: new Date().toISOString(),
-      status: "confirmed" as const,
-      items: cart.map((item) => ({
-        id:       item.id,
-        name:     item.name,
-        family:   item.family,
-        price:    item.price,
-        quantity: item.quantity,
-        image:    item.image,
-      })),
-      subtotal,
-      deliveryFee,
-      platformFee: PLATFORM_FEE,
-      total,
-      deliveryMethod,
-      paymentMethod,
-      fullName: form.fullName,
-      phone:    form.phone,
-      email:    form.email,
-      address:  form.address  || undefined,
-      city:     form.city     || undefined,
-      state:    form.state    || undefined,
-      note:     form.note     || undefined,
-    };
-  
-    orderStore.save(newOrder); 
-    orderStore.autoAdvance(newOrder.id, deliveryMethod);
-    setPaidAmount(total);
-    setSuccessVisible(true);
-    cartStore.clear();
-  }
+  if (!validate()) return;
+ 
+  const newOrder = {
+    id: Date.now().toString(),
+    reference: Math.random().toString(36).slice(2, 10).toUpperCase(),
+    placedAt: new Date().toISOString(),
+    status: "confirmed" as const,
+    items: cart.map((item) => ({
+      id:       item.id,
+      name:     item.name,
+      family:   item.family,
+      price:    item.price,
+      quantity: item.quantity,
+      image:    item.image,
+    })),
+    subtotal,
+    deliveryFee,
+    platformFee: PLATFORM_FEE,
+    total,
+    deliveryMethod,
+    paymentMethod,
+    fullName: form.fullName,
+    phone:    form.phone,
+    email:    form.email,
+    address:  form.address  || undefined,
+    city:     form.city     || undefined,
+    state:    form.state    || undefined,
+    note:     form.note     || undefined,
+  };
+ 
+  orderStore.save(newOrder);
+  orderStore.autoAdvance(newOrder.id, deliveryMethod, newOrder.reference);
+  setPaidAmount(total);
+  setSuccessVisible(true);
+  cartStore.clear();
+}
+ 
 
   function onDone() {
     setSuccessVisible(false);
