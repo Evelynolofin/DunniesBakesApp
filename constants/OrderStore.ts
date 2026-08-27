@@ -25,7 +25,7 @@ export type Order = {
   items: OrderItem[];
   status: OrderStatus;
   deliveryMethod: "delivery" | "pickup";
-  paymentMethod: "card" | "transfer" | "cash";
+  paymentMethod: "wallet" | "paystack" | "transfer" | "cash";
   subtotal: number;
   deliveryFee: number;
   platformFee: number;

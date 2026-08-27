@@ -5,6 +5,9 @@ import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
 import { orderStore } from "@/constants/OrderStore";
 import { requestNotificationPermission } from "@/constants/Notificationservice";
+import { PaystackProvider } from "react-native-paystack-webview";
+import { PAYSTACK_PUBLIC_KEY } from "@/constants/Paystack";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 export default function RootLayout() {
   const appState = useRef<AppStateStatus>(AppState.currentState);
@@ -44,14 +47,19 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-      }}
-    >
-      <Stack.Screen name="index" />
-      <Stack.Screen name="auth/login" />
-      <Stack.Screen name="(tabs)" />
-    </Stack>
+    <SafeAreaProvider>
+      <PaystackProvider publicKey={PAYSTACK_PUBLIC_KEY ?? ""} debug={true}>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+        }}
+      >
+        <Stack.Screen name="index" />
+        <Stack.Screen name="auth/login" />
+        <Stack.Screen name="(tabs)" />
+      </Stack>
+    </PaystackProvider>
+    </SafeAreaProvider>
+    
   );
 }

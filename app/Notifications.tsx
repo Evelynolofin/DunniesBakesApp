@@ -38,10 +38,11 @@ const TYPE_CONFIG: Record<
   AppNotification["type"],
   { icon: string; color: string; label: string }
 > = {
-  order:  { icon: "receipt-outline",        color: ORANGE, label: "Order"   },
-  promo:  { icon: "pricetag-outline",        color: AMBER,  label: "Promo"   },
-  auth:   { icon: "person-circle-outline",   color: BLUE,   label: "Account" },
-  system: { icon: "information-circle-outline", color: MUTED, label: "System" },
+  order:   { icon: "receipt-outline",           color: ORANGE, label: "Order"   },
+  payment: { icon: "card-outline",               color: "#8B5CF6", label: "Payment" },
+  promo:   { icon: "pricetag-outline",           color: AMBER,  label: "Promo"   },
+  auth:    { icon: "person-circle-outline",      color: BLUE,   label: "Account" },
+  system:  { icon: "information-circle-outline", color: MUTED,  label: "System"  },
 };
 
 function timeAgo(ts: number): string {
@@ -121,10 +122,11 @@ function EmptyState() {
 
 type Filter = "all" | AppNotification["type"];
 const FILTERS: { id: Filter; label: string }[] = [
-  { id: "all",    label: "All"     },
-  { id: "order",  label: "Orders"  },
-  { id: "promo",  label: "Promos"  },
-  { id: "auth",   label: "Account" },
+  { id: "all",     label: "All"      },
+  { id: "order",   label: "Orders"   },
+  { id: "payment", label: "Payments" },
+  { id: "promo",   label: "Promos"   },
+  { id: "auth",    label: "Account"  },
 ];
 
 function FilterTab({
@@ -185,6 +187,8 @@ export default function NotificationsScreen() {
     );
     if (item.type === "order" || item.data?.screen === "order") {
       router.push("/(tabs)/order" as any);
+    } else if (item.type === "payment" || item.data?.screen === "wallet") {
+      router.push("/(tabs)/wallet" as any);
     }
   }, []);
 

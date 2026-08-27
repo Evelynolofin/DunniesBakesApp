@@ -250,8 +250,8 @@ function OrderDetailModal({
 
         <ScrollView showsVerticalScrollIndicator={false}>
           <View style={detail.header}>
-            <View style={detail.headerLeft}>
-              <Text style={card.ref}>Order ID: #{order.reference}</Text>
+            <View style={[detail.headerLeft, { flex: 1, marginRight: 10 }]}>
+              <Text style={card.ref} numberOfLines={2}>Order ID: #{order.reference}</Text>
               <Text style={detail.date}>{formatDate(order.placedAt)}</Text>
             </View>
             <StatusBadge status={order.status} />
@@ -301,11 +301,13 @@ function OrderDetailModal({
             <View style={detail.infoRow}>
               <Text style={detail.infoLabel}>Payment</Text>
               <Text style={detail.infoVal}>
-                {order.paymentMethod === "card"
-                  ? "💳 Card"
+                {order.paymentMethod === "wallet"
+                  ? "👛 Wallet"
+                  : order.paymentMethod === "paystack"
+                  ? "💳 Paystack"
                   : order.paymentMethod === "transfer"
                   ? "🏦 Bank Transfer"
-                  : "💵 Cash"}
+                  : "💵 Cash on Delivery"}
               </Text>
             </View>
             {order.address ? (
@@ -415,8 +417,10 @@ function OrderCard({
       activeOpacity={0.85}
     >
       <View style={card.top}>
-        <View>
-          <Text style={card.ref}>Order ID: #{order.reference}</Text>
+        <View style={{ flex: 1, marginRight: 10 }}>
+          <Text style={card.ref} numberOfLines={1} ellipsizeMode="middle">
+            Order ID: #{order.reference}
+          </Text>
           <Text style={card.time}>{timeAgo(order.placedAt)}</Text>
         </View>
         <StatusBadge status={order.status} />
@@ -674,7 +678,7 @@ const styles = StyleSheet.create({
 const card = StyleSheet.create({
   wrap: {
     backgroundColor: WHITE, borderRadius: 20, padding: 16, marginBottom: 12,
-    shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
+    shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, flexShrink: 0,
   },
   top:       { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 },
   ref:       { fontSize: 15, fontWeight: "700", color: BLACK },

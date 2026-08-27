@@ -16,7 +16,7 @@ export type AppNotification = {
   id: string;
   title: string;
   body: string;
-  type: "order" | "promo" | "auth" | "system";
+  type: "order" | "promo" | "auth" | "system" | "payment";
   read: boolean;
   timestamp: number;
   data?: Record<string, string>;
@@ -92,6 +92,12 @@ export async function requestNotificationPermission(): Promise<boolean> {
     });
     await Notifications.setNotificationChannelAsync("orders", {
       name: "Order Updates",
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: "#F6410B",
+    });
+    await Notifications.setNotificationChannelAsync("payments", {
+      name: "Payments",
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: "#F6410B",
@@ -197,7 +203,7 @@ export async function scheduleLocalNotification(
   });
 
   const type: AppNotification["type"] =
-    channelId === "orders" ? "order" : "system";
+    channelId === "orders" ? "order" : channelId === "payments" ? "payment" : "system";
   await addNotification({ title, body, type, data });
 }
 
@@ -269,4 +275,65 @@ export async function notifySignUp(name: string): Promise<void> {
     body: `Welcome to Dunnies Kitchen, ${name}! Start exploring our menu.`,
     type: "auth",
   });
+}
+
+export async function notifyWalletTopUp(amount: number, reference: string): Promise<void> {
+  await scheduleLocalNotification(
+    "Wallet Topped Up! 💰",
+    `₦${amount.toLocaleString()} has been added to your wallet.`,
+    { screen: "wallet", reference },
+    "payments"
+  );
+}
+
+export async function notifyWalletDebit(
+  amount: number,
+  reference: string,
+  orderRef?: string
+): Promise<void> {
+  await scheduleLocalNotification(
+    "Wallet Payment Sent 👛",
+    `₦${amount.toLocaleString()} was deducted from your wallet${
+      orderRef ? ` for order #${orderRef}` : ""
+    }.`,
+    { screen: "wallet", reference },
+    "payments"
+  );
+}
+
+/**
+ * Fires for EVERY order payment regardless of method (wallet, paystack,
+ * transfer, cash) — wording differs because cash/transfer are still
+ * pending at the point the order is placed, while wallet/paystack are
+ * already confirmed.
+ */
+export async function notifyOrderPayment(
+  method: "wallet" | "paystack" | "transfer" | "cash",
+  amount: number,
+  reference: string,
+  orderRef: string
+): Promise<void> {
+  const amt = `₦${amount.toLocaleString()}`;
+
+  const copy: Record<typeof method, { title: string; body: string }> = {
+    wallet: {
+      title: "Payment Confirmed 💳",
+      body: `${amt} was paid from your wallet for order #${orderRef}.`,
+    },
+    paystack: {
+      title: "Payment Confirmed 💳",
+      body: `${amt} payment for order #${orderRef} was confirmed via Paystack.`,
+    },
+    transfer: {
+      title: "Bank Transfer Pending 🏦",
+      body: `Complete your ${amt} bank transfer for order #${orderRef} to confirm payment.`,
+    },
+    cash: {
+      title: "Cash Payment Pending 💵",
+      body: `Pay ${amt} in cash when order #${orderRef} arrives.`,
+    },
+  };
+
+  const { title, body } = copy[method];
+  await scheduleLocalNotification(title, body, { screen: "wallet", reference, orderRef }, "payments");
 }
