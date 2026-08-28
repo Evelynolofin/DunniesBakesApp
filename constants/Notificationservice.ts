@@ -102,6 +102,12 @@ export async function requestNotificationPermission(): Promise<boolean> {
       vibrationPattern: [0, 250, 250, 250],
       lightColor: "#F6410B",
     });
+    await Notifications.setNotificationChannelAsync("promos", {
+      name: "Promotions & Rewards",
+      importance: Notifications.AndroidImportance.DEFAULT,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: "#F6410B",
+    });
   }
 
   return true;
@@ -189,21 +195,24 @@ export async function scheduleLocalNotification(
   if (channelId === "orders" && !prefs.orderUpdates) return;
 
   const granted = await requestNotificationPermission();
-  if (!granted) return;
-
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title,
-      body,
-      data: data ?? {},
-      sound: true,
-      ...(Platform.OS === "android" ? { channelId } : {}),
-    },
-    trigger: null,
-  });
+  if (granted) {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data: data ?? {},
+        sound: true,
+        ...(Platform.OS === "android" ? { channelId } : {}),
+      },
+      trigger: null,
+    });
+  }
 
   const type: AppNotification["type"] =
-    channelId === "orders" ? "order" : channelId === "payments" ? "payment" : "system";
+    channelId === "orders" ? "order" :
+    channelId === "payments" ? "payment" :
+    channelId === "promos" ? "promo" :
+    "system";
   await addNotification({ title, body, type, data });
 }
 
@@ -336,4 +345,26 @@ export async function notifyOrderPayment(
 
   const { title, body } = copy[method];
   await scheduleLocalNotification(title, body, { screen: "wallet", reference, orderRef }, "payments");
+}
+
+export async function notifyPointsEarned(points: number, orderRef: string): Promise<void> {
+  await scheduleLocalNotification(
+    "You Just Earned Reward Points! 🎁",
+    `You earned ${points.toLocaleString()} points from order #${orderRef}. Redeem them for a discount on your next order!`,
+    { screen: "loyalty", orderRef },
+    "promos"
+  );
+}
+
+export async function notifyPointsRedeemed(
+  points: number,
+  discountAmount: number,
+  orderRef: string
+): Promise<void> {
+  await scheduleLocalNotification(
+    "Points Redeemed 🏷️",
+    `You used ${points.toLocaleString()} points for ₦${discountAmount.toLocaleString()} off order #${orderRef}.`,
+    { screen: "loyalty", orderRef },
+    "promos"
+  );
 }

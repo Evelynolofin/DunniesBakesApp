@@ -369,14 +369,12 @@ export default function ProductsScreen() {
         onCancel={cancelReplace}
       />
 
-      <Modal
-        visible={checkoutVisible}
-        animationType="slide"
-        statusBarTranslucent 
-        onRequestClose={() => setCheckoutVisible(false)}
-      >
-        <CheckoutScreen onClose={() => setCheckoutVisible(false)} />
-      </Modal>
+      {checkoutVisible && (
+        <View style={StyleSheet.absoluteFillObject}>
+          <CheckoutScreen onClose={() => setCheckoutVisible(false)} />
+        </View>
+      )}
+
     </View>
   );
 }

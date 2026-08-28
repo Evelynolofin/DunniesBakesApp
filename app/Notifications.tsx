@@ -347,11 +347,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-evenly",
     alignItems: "center",
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
   },
 
   filterTab: {
-    flex: 1,
+    paddingHorizontal: 4,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 14,

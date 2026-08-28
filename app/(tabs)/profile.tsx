@@ -28,6 +28,7 @@ import {
   clearCurrentUserNotificationData,
 } from "@/constants/Notificationservice";
 import * as Notifications from "expo-notifications";
+import PromotionsScreen from "@/components/Promotions";
 
 const ORANGE   = "#F6410B";
 const BLACK    = "#1A1A1A";
@@ -377,8 +378,12 @@ export default function ProfileScreen() {
   const [editVisible,   setEditVisible]   = useState(false);
   const [pwVisible,     setPwVisible]     = useState(false);
   const [deleteVisible, setDeleteVisible] = useState(false);
+  const [promotionsVisible, setPromotionsVisible] = useState(false);
+  // NEW: tracks whether settings_${email} has been loaded, so toggleSetting
+  // doesn't fire (and overwrite storage) before we know the saved values.
+  const [settingsReady, setSettingsReady] = useState(false);
 
-  const loadProfile = useCallback(async () => {
+  const loadProfile = useCallback(async (): Promise<string> => {
     try {
       const email    = (await AsyncStorage.getItem("currentUserEmail"))   ?? "";
       const fullName = (await AsyncStorage.getItem(`fullName_${email}`))  ?? "";
@@ -388,8 +393,28 @@ export default function ProfileScreen() {
       const state    = (await AsyncStorage.getItem(`state_${email}`))     ?? "";
 
       setProfile({ fullName, email, phone, address, city, state });
+      return email;
     } catch (e) {
       console.error("loadProfile failed", e);
+      return "";
+    }
+  }, []);
+
+  // NEW: actually reads back promoEmails / darkMode / saveAddress that
+  // toggleSetting writes to `settings_${email}`. Without this the toggles
+  // always reset to their hardcoded defaults on every mount.
+  const loadUserSettings = useCallback(async (email: string) => {
+    try {
+      if (!email) return;
+      const raw = await AsyncStorage.getItem(`settings_${email}`);
+      if (raw) {
+        const saved = JSON.parse(raw) as Partial<Settings>;
+        setSettings((prev) => ({ ...prev, ...saved }));
+      }
+    } catch (e) {
+      console.error("loadUserSettings failed", e);
+    } finally {
+      setSettingsReady(true);
     }
   }, []);
 
@@ -415,7 +440,10 @@ export default function ProfileScreen() {
   }, []);
 
   useEffect(() => {
-    loadProfile();
+    (async () => {
+      const email = await loadProfile();
+      await loadUserSettings(email);
+    })();
     loadOrderCount();
     loadNotificationSettings();
     orderStore.addListener(loadOrderCount);
@@ -466,11 +494,18 @@ export default function ProfileScreen() {
   }
 
   async function toggleSetting(key: "promoEmails" | "darkMode" | "saveAddress", val: boolean) {
+    // Guard: don't persist under an empty-email key, and don't fire before
+    // the saved settings have actually loaded (avoids a race that could
+    // stomp the just-loaded values with stale defaults).
+    if (!profile.email || !settingsReady) return;
+
     const updated = { ...settings, [key]: val };
     setSettings(updated);
     try {
       await AsyncStorage.setItem(`settings_${profile.email}`, JSON.stringify(updated));
-    } catch {}
+    } catch (e) {
+      console.error("toggleSetting failed", e);
+    }
   }
 
   function logout() {
@@ -631,10 +666,19 @@ export default function ProfileScreen() {
             disabled={!settings.notifications}
           />
           <SettingToggle
-            icon="pricetag-outline" label="Promotions & Offers"
-            sub="Deals, discounts, new items"
+            icon="pricetag-outline" label="Promo Notifications"
+            sub="Get notified about new deals and discounts"
             iconBg="#F59E0B" value={settings.promoEmails}
             onChange={(v) => toggleSetting("promoEmails", v)}
+          />
+        </Section>
+
+        <Section title="Offers">
+          <NavRow
+            icon="gift-outline" label="Promotions & Offers"
+            sub="See current deals and your loyalty points"
+            iconBg="#F59E0B"
+            onPress={() => setPromotionsVisible(true)}
           />
         </Section>
 
@@ -703,6 +747,13 @@ export default function ProfileScreen() {
         onConfirm={deleteAccount}
         onClose={() => setDeleteVisible(false)}
       />
+
+      {promotionsVisible && (
+        <View style={StyleSheet.absoluteFillObject}>
+          <PromotionsScreen onClose={() => setPromotionsVisible(false)} />
+        </View>
+      )}
+
     </View>
   );
 }
