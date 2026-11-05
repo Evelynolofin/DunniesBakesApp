@@ -6,10 +6,17 @@ import { Platform } from "react-native";
 
 export default function TabLayout() {
   useEffect(() => {
-    if (Platform.OS === "android") {
-      NavigationBar.setPositionAsync("absolute"); 
-      NavigationBar.setBackgroundColorAsync("#ffffff01"); 
-      NavigationBar.setButtonStyleAsync("dark");
+    if (Platform.OS !== "android") return;
+    // Newer Expo SDKs (edge-to-edge) removed setPositionAsync / setBackgroundColorAsync,
+    // so only call what exists instead of crashing the whole app.
+    const nb: any = NavigationBar;
+    try {
+      if (typeof nb.setPositionAsync === "function") nb.setPositionAsync("absolute");
+      if (typeof nb.setBackgroundColorAsync === "function") nb.setBackgroundColorAsync("#ffffff01");
+      if (typeof nb.setButtonStyleAsync === "function") nb.setButtonStyleAsync("dark");
+      else if (typeof nb.setStyle === "function") nb.setStyle("dark");
+    } catch (e) {
+      console.log("[TabLayout] NavigationBar setup skipped", e);
     }
   }, []);
 

@@ -223,7 +223,7 @@ function OrderDetailModal({
     Alert.alert(
       "Cancel Order",
       order.paymentMethod === "wallet" || order.paymentMethod === "paystack"
-        ? "Are you sure you want to cancel this order? This cannot be undone. You'll be refunded to your wallet."
+        ? "Are you sure you want to cancel this order? This cannot be undone. You'll be refunded to where you paid from."
         : "Are you sure you want to cancel this order? This cannot be undone.",
       [
         { text: "Keep Order", style: "cancel" },
@@ -368,11 +368,39 @@ function OrderDetailModal({
           </View>
 
           {order.status === "cancelled" && order.refund && (
-            <View style={detail.refundBox}>
-              <Ionicons name="wallet-outline" size={18} color="#16A34A" />
-              <Text style={detail.refundText}>
-                ₦{order.refund.amount.toLocaleString()} was refunded to your wallet.
+            <View
+              style={[
+                detail.refundBox,
+                order.refund.status === "failed" && { backgroundColor: "#FEF2F2" },
+              ]}
+            >
+              <Ionicons
+                name={order.refund.status === "failed" ? "alert-circle-outline" : "wallet-outline"}
+                size={18}
+                color={order.refund.status === "failed" ? "#EF4444" : "#16A34A"}
+              />
+              <Text
+                style={[
+                  detail.refundText,
+                  order.refund.status === "failed" && { color: "#EF4444" },
+                ]}
+              >
+                {order.refund.status === "failed"
+                  ? `Your ₦${order.refund.amount.toLocaleString()} Paystack refund didn't go through.`
+                  : order.refund.destination === "wallet"
+                  ? `₦${order.refund.amount.toLocaleString()} was refunded to your wallet.`
+                  : `₦${order.refund.amount.toLocaleString()} is being refunded to your original payment method via Paystack (a few business days).`}
               </Text>
+              {order.refund.status === "failed" && (
+                <TouchableOpacity
+                  onPress={() => {
+                    onCancel(order.id);
+                    onClose();
+                  }}
+                >
+                  <Text style={{ color: "#EF4444", fontWeight: "700", fontSize: 13 }}>Retry</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
 

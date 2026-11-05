@@ -310,6 +310,12 @@ export async function notifyWalletDebit(
   );
 }
 
+/**
+ * Fires for EVERY order payment regardless of method (wallet, paystack,
+ * transfer, cash) — wording differs because cash/transfer are still
+ * pending at the point the order is placed, while wallet/paystack are
+ * already confirmed.
+ */
 export async function notifyOrderPayment(
   method: "wallet" | "paystack" | "transfer" | "cash",
   amount: number,
@@ -363,11 +369,17 @@ export async function notifyPointsRedeemed(
   );
 }
 
-export async function notifyOrderRefund(amount: number, orderRef: string): Promise<void> {
+export async function notifyOrderRefund(
+  amount: number,
+  orderRef: string,
+  destination: "wallet" | "paystack" = "wallet"
+): Promise<void> {
   await scheduleLocalNotification(
-    "Order Refund Processed 💸",
-    `₦${amount.toLocaleString()} has been refunded for order #${orderRef}. Check your wallet for the updated balance.`,
-    { screen: "wallet", orderRef },
+    "Refund Issued 💸",
+    destination === "wallet"
+      ? `₦${amount.toLocaleString()} for cancelled order #${orderRef} has been refunded to your wallet.`
+      : `₦${amount.toLocaleString()} for cancelled order #${orderRef} is being refunded to your original payment method via Paystack.`,
+    { screen: destination === "wallet" ? "wallet" : "order", orderRef },
     "payments"
   );
 }

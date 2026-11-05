@@ -3,6 +3,7 @@ import * as Notifications from "expo-notifications";
 import { addNotification, getNotificationPrefs, notifyOrderRefund } from "@/constants/Notificationservice";
 import { addTransaction } from "@/constants/Transactionstore";
 import { restoreRedeemedPoints, reverseEarnedPoints } from "@/constants/LoyaltyStore";
+import { requestPaystackRefund } from "@/constants/Paystack";
 
 export type OrderStatus =
   | "confirmed"
@@ -47,7 +48,8 @@ export type Order = {
 
 export type OrderRefund = {
   amount: number;
-  destination: "wallet";
+  destination: "wallet" | "paystack";   // wallet payments -> wallet, Paystack payments -> back to Paystack
+  status: "completed" | "processing" | "failed";
   at: string;
 };
 
@@ -366,11 +368,22 @@ class OrderStore {
 
   private cancelling = new Set<string>();
 
+  private async saveRefund(scope: string, orderId: string, refund: OrderRefund) {
+    const fresh = await this.getAllForScope(scope);
+    const idx = fresh.findIndex((o) => o.id === orderId);
+    if (idx === -1) return;
+    fresh[idx] = { ...fresh[idx], refund };
+    await this.saveForScope(scope, fresh);
+    this.notify();
+  }
+
   /**
-   * Cancels an order AND refunds it. Wallet and Paystack payments are credited
-   * back to the customer's wallet (card refunds need a server, so the wallet is
-   * the instant route). Bank transfer / cash orders have nothing to auto-refund.
-   * Safe to call twice: the refund is recorded on the order and never repeated.
+   * Cancels an order and refunds it to where the money came from:
+   *  - paid with Wallet   -> credited back to the wallet
+   *  - paid with Paystack -> refunded to the original card/bank via Paystack
+   *  - bank transfer / cash -> nothing to auto-refund
+   * Calling it again on a cancelled order whose Paystack refund FAILED retries
+   * that refund. A completed/processing refund is never repeated.
    */
   async cancelOrder(orderId: string): Promise<CancelResult> {
     if (this.cancelling.has(orderId)) {
@@ -382,70 +395,93 @@ class OrderStore {
       const all = await this.getAllForScope(scope);
       const order = all.find((o) => o.id === orderId);
       if (!order) return { cancelled: false, refundedAmount: 0, message: "Order not found." };
-      if (order.status === "cancelled" && order.refund) {
+
+      const retrying = order.status === "cancelled";
+      if (retrying && (!order.refund || order.refund.status !== "failed")) {
         return { cancelled: false, refundedAmount: 0, message: "This order was already cancelled and refunded." };
       }
-      if (order.status !== "confirmed" && order.status !== "cancelled") {
+      if (!retrying && order.status !== "confirmed") {
         return { cancelled: false, refundedAmount: 0, message: "This order can no longer be cancelled." };
       }
 
-      if (order.status !== "cancelled") {
-        await this.updateStatus(orderId, "cancelled");
-      }
-
-      const paidOnline = order.paymentMethod === "wallet" || order.paymentMethod === "paystack";
       const email = await AsyncStorage.getItem(CURRENT_USER_KEY);
+      const amount = order.total;
 
-      if (!paidOnline) {
-        const msg = order.paymentMethod === "transfer"
-          ? "Order cancelled. If you already sent a bank transfer, contact support with your order reference to get it refunded."
-          : "Order cancelled. You hadn't paid yet, so there's nothing to refund.";
-        return { cancelled: true, refundedAmount: 0, message: msg };
+      if (!retrying) {
+        await this.updateStatus(orderId, "cancelled");
+
+        // loyalty points are handled once, at cancellation, for any paid order
+        const paid = order.paymentMethod === "wallet" || order.paymentMethod === "paystack";
+        if (paid && email) {
+          try {
+            if ((order.pointsRedeemed ?? 0) > 0) {
+              await restoreRedeemedPoints(email, order.pointsRedeemed!, order.reference);
+            }
+            await reverseEarnedPoints(email, order.total, order.reference);
+          } catch (e) {
+            console.log("[OrderStore.cancelOrder] points adjustment failed", e);
+          }
+        }
       }
-      if (!email) {
+
+      // ---- Wallet -> wallet ----
+      if (order.paymentMethod === "wallet") {
+        if (!email) {
+          return {
+            cancelled: true, refundedAmount: 0,
+            message: "Order cancelled. Log in to your account and contact support to receive your wallet refund.",
+          };
+        }
+        const balKey = `wallet_balance_${email}`;
+        const current = Number((await AsyncStorage.getItem(balKey)) ?? 0) || 0;
+        await AsyncStorage.setItem(balKey, String(current + amount));
+        await addTransaction(email, {
+          type: "credit",
+          method: "wallet",
+          title: "Order refund",
+          subtitle: `Cancelled order · ${order.reference}`,
+          amount,
+          reference: `REFUND_${order.reference}`,
+          orderRef: order.reference,
+        });
+        await this.saveRefund(scope, orderId, {
+          amount, destination: "wallet", status: "completed", at: new Date().toISOString(),
+        });
+        notifyOrderRefund(amount, order.reference, "wallet").catch(() => {});
+        return {
+          cancelled: true, refundedAmount: amount,
+          message: `Order cancelled. ₦${amount.toLocaleString()} has been refunded to your wallet.`,
+        };
+      }
+
+      // ---- Paystack -> back to Paystack ----
+      if (order.paymentMethod === "paystack") {
+        const result = await requestPaystackRefund(order.reference, amount * 100);
+        if (result.ok) {
+          await this.saveRefund(scope, orderId, {
+            amount, destination: "paystack", status: "processing", at: new Date().toISOString(),
+          });
+          notifyOrderRefund(amount, order.reference, "paystack").catch(() => {});
+          return {
+            cancelled: true, refundedAmount: amount,
+            message: `Order cancelled. ₦${amount.toLocaleString()} is being refunded to your original payment method via Paystack. This can take a few business days to show.`,
+          };
+        }
+        await this.saveRefund(scope, orderId, {
+          amount, destination: "paystack", status: "failed", at: new Date().toISOString(),
+        });
         return {
           cancelled: true, refundedAmount: 0,
-          message: "Order cancelled. Log in to your account and contact support to receive your refund.",
+          message: `Order cancelled, but the Paystack refund couldn't be processed (${result.message}). Open the order and tap "Retry refund".`,
         };
       }
 
-      const amount = order.total;
-      const balKey = `wallet_balance_${email}`;
-      const current = Number((await AsyncStorage.getItem(balKey)) ?? 0) || 0;
-      await AsyncStorage.setItem(balKey, String(current + amount));
-
-      await addTransaction(email, {
-        type: "credit",
-        method: "wallet",
-        title: "Order refund",
-        subtitle: `Cancelled order · ${order.reference}`,
-        amount,
-        reference: `REFUND_${order.reference}`,
-        orderRef: order.reference,
-      });
-
-      if ((order.pointsRedeemed ?? 0) > 0) {
-        await restoreRedeemedPoints(email, order.pointsRedeemed!, order.reference);
-      }
-      await reverseEarnedPoints(email, order.total, order.reference);
-
-      // record the refund on the order so it can never be paid out twice
-      const fresh = await this.getAllForScope(scope);
-      const idx = fresh.findIndex((o) => o.id === orderId);
-      if (idx !== -1) {
-        fresh[idx] = {
-          ...fresh[idx],
-          refund: { amount, destination: "wallet", at: new Date().toISOString() },
-        };
-        await this.saveForScope(scope, fresh);
-        this.notify();
-      }
-
-      notifyOrderRefund(amount, order.reference).catch(() => {});
+      // ---- Transfer / cash ----
       return {
-        cancelled: true,
-        refundedAmount: amount,
-        message: `Order cancelled. ₦${amount.toLocaleString()} has been refunded to your wallet.`,
+        cancelled: true, refundedAmount: 0,
+        message: order.paymentMethod === "transfer"
+          ? "Order cancelled. If you already sent a bank transfer, contact support with your order reference to get it refunded."
+          : "Order cancelled. You hadn't paid yet, so there's nothing to refund.",
       };
     } catch (e) {
       console.log("[OrderStore.cancelOrder] failed", e);
