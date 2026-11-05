@@ -344,8 +344,6 @@ export default function WalletScreen({ onClose }: { onClose?: () => void }) {
     >
       <View style={styles.root}>
         <StatusBar
-          translucent
-          backgroundColor="transparent"
           barStyle="dark-content"
         />
 

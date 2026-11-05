@@ -19,8 +19,8 @@ import { cartStore, CartProduct } from "@/constants/Cartstore";
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { orderStore } from "@/constants/OrderStore";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { usePaystack } from "react-native-paystack-webview";
-import { verifyPaystackTransaction } from "@/constants/Paystack";
+import { usePaystack, PaystackProvider } from "react-native-paystack-webview";
+import { verifyPaystackTransaction, PAYSTACK_PUBLIC_KEY } from "@/constants/Paystack";
 import { notifyOrderPlaced, notifyOrderPayment } from "@/constants/Notificationservice";
 import { recordOrderPayment } from "@/constants/Transactionstore";
 import {
@@ -195,16 +195,17 @@ function SuccessModal({ visible, total, onDone }: { visible: boolean; total: num
   );
 }
 
-const handleBack = () => {
-  console.log("[handleBack] called, canGoBack:", router.canGoBack());
-  if (router.canGoBack()) {
-    router.back();
-  } else {
-    router.replace(PRODUCTS); 
-  }
-};
+// Own provider so Paystack's popup opens inside this screen's Modal (the one in
+// _layout.tsx sits underneath it and would be hidden).
+export default function CheckoutScreen(props: { onClose?: () => void }) {
+  return (
+    <PaystackProvider publicKey={PAYSTACK_PUBLIC_KEY ?? ""} debug={true}>
+      <CheckoutContent {...props} />
+    </PaystackProvider>
+  );
+}
 
-export default function CheckoutScreen({ onClose = () => router.back() }: { onClose?: () => void }) {
+function CheckoutContent({ onClose = () => router.back() }: { onClose?: () => void }) {
   console.log("[CheckoutScreen] render start");
 
   const [cart, setCart] = useState<CartProduct[]>(() => {
@@ -247,24 +248,29 @@ export default function CheckoutScreen({ onClose = () => router.back() }: { onCl
 
       setEmail(email);
 
-      const fullName =
-        (await AsyncStorage.getItem(`fullName_${email}`)) ?? "";
+      const fullName = (
+        (await AsyncStorage.getItem(`fullName_${email}`)) ?? ""
+      ).trim();
       console.log("[loadUser] fullName:", fullName);
 
-      const phone =
-        (await AsyncStorage.getItem(`phone_${email}`)) ?? "";
+      const phone = (
+        (await AsyncStorage.getItem(`phone_${email}`)) ?? ""
+      ).trim();
       console.log("[loadUser] phone:", phone);
 
-      const address =
-        (await AsyncStorage.getItem(`address_${email}`)) ?? "";
+      const address = (
+        (await AsyncStorage.getItem(`address_${email}`)) ?? ""
+      ).trim();
       console.log("[loadUser] address:", address);
 
-      const city =
-        (await AsyncStorage.getItem(`city_${email}`)) ?? "";
+      const city = (
+        (await AsyncStorage.getItem(`city_${email}`)) ?? ""
+      ).trim();
       console.log("[loadUser] city:", city);
 
-      const state =
-        (await AsyncStorage.getItem(`state_${email}`)) ?? "";
+      const state = (
+        (await AsyncStorage.getItem(`state_${email}`)) ?? ""
+      ).trim();
       console.log("[loadUser] state:", state);
 
       setForm((prev) => {
@@ -345,28 +351,45 @@ export default function CheckoutScreen({ onClose = () => router.back() }: { onCl
     setErrors((e) => ({ ...e, [key]: undefined }));
   }
 
+  
   function validate(): boolean {
-    console.log("[validate] running validation, form:", form, "deliveryMethod:", deliveryMethod, "paymentMethod:", paymentMethod);
+    console.log("[validate] checking form:", form);
+
     const e: FormErrors = {};
-    if (!form.fullName.trim()) e.fullName = "Required";
-    if (!form.phone.trim() || form.phone.replace(/\D/g, "").length < 11)
+
+    if (!form.fullName.trim()) {
+      e.fullName = "Full name is required";
+    }
+
+    const phoneDigits = form.phone.replace(/\D/g, "");
+
+    if (phoneDigits.length < 11) {
       e.phone = "Enter a valid phone number";
-    if (!form.email.trim() || !form.email.includes("@"))
-      e.email = "Enter a valid email";
+    }
+
+    if (!form.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      e.email = "Enter a valid email address";
+    }
+
     if (deliveryMethod === "delivery") {
-      if (!form.address.trim()) e.address = "Required";
-      if (!form.city.trim())    e.city    = "Required";
-      if (!form.state.trim())   e.state   = "Required";
+      if (!form.address.trim()) e.address = "Delivery address is required";
+      if (!form.city.trim()) e.city = "City is required";
+      if (!form.state.trim()) e.state = "State is required";
     }
+
     if (paymentMethod === "wallet" && walletBalance < total) {
-      e.wallet = "Insufficient wallet balance for this order";
+      e.wallet = "Insufficient wallet balance";
     }
-    console.log("[validate] errors found:", e);
+
     setErrors(e);
-    const isValid = Object.keys(e).length === 0;
-    console.log("[validate] result:", isValid);
-    return isValid;
+
+    const valid = Object.keys(e).length === 0;
+
+    console.log("[validate] result:", valid, "errors:", e);
+
+    return valid;
   }
+
 
   async function debitWallet(amt: number) {
     console.log("[debitWallet] start", { amt, email });
@@ -552,12 +575,16 @@ export default function CheckoutScreen({ onClose = () => router.back() }: { onCl
     finalizeOrder();
   }
 
+  
   function onDone() {
-    console.log("[onDone] called, clearing cart and navigating to ORDERS");
+    console.log("[onDone] clearing cart and navigating");
+
     setSuccessVisible(false);
     cartStore.clear();
-    router.replace(ORDERS);
+
+    router.replace("/(tabs)/order");
   }
+
 
   const isProcessing = walletProcessing || paystackProcessing;
   console.log("[CheckoutScreen] isProcessing:", isProcessing);
@@ -566,7 +593,7 @@ export default function CheckoutScreen({ onClose = () => router.back() }: { onCl
     console.log("[CheckoutScreen] rendering empty cart state");
     return (
       <View style={styles.root}>
-        <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+        <StatusBar  barStyle="dark-content" />
         <View style={styles.header}>
           <TouchableOpacity onPress={() => {
             console.log("[CheckoutScreen] empty-state back pressed");
@@ -598,7 +625,7 @@ export default function CheckoutScreen({ onClose = () => router.back() }: { onCl
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={styles.root}>
-       <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+       <StatusBar barStyle="dark-content" />
         <View style={styles.header}>
           <TouchableOpacity onPress={() => {
             console.log("[CheckoutScreen] main back pressed");

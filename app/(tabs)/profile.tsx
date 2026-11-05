@@ -562,7 +562,7 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" />
 
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Profile</Text>
@@ -749,7 +749,7 @@ export default function ProfileScreen() {
       />
 
       {promotionsVisible && (
-        <View style={StyleSheet.absoluteFillObject}>
+        <View style={StyleSheet.absoluteFill}>
           <PromotionsScreen onClose={() => setPromotionsVisible(false)} />
         </View>
       )}

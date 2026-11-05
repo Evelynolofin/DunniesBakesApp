@@ -210,7 +210,7 @@ export default function ProductsScreen() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [cartVisible, setCartVisible] = useState(false);
-  const [checkoutVisible,   setCheckoutVisible]   = useState(false);
+  const [checkoutVisible, setCheckoutVisible] = useState(false);
   const [cart, setCart] = useState<CartProduct[]>(() => cartStore.getItems());
 
   const [pendingProduct, setPendingProduct] = useState<Product | null>(null);
@@ -267,8 +267,10 @@ export default function ProductsScreen() {
     };
 
     const handleCheckout = () => {
+      console.log("[Products] handleCheckout pressed");
       setCartVisible(false);
-      setTimeout(() => setCheckoutVisible(true));
+      // wait for the cart sheet Modal to finish closing (iOS drops a second Modal otherwise)
+      setTimeout(() => setCheckoutVisible(true), 400);
     };
   
     const getCartItem = (id: string) => cart.find((i) => i.id === id);
@@ -369,12 +371,14 @@ export default function ProductsScreen() {
         onCancel={cancelReplace}
       />
 
-      {checkoutVisible && (
-        <View style={StyleSheet.absoluteFillObject}>
-          <CheckoutScreen onClose={() => setCheckoutVisible(false)} />
-        </View>
-      )}
-
+      <Modal
+        visible={checkoutVisible}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setCheckoutVisible(false)}
+      >
+        <CheckoutScreen onClose={() => setCheckoutVisible(false)} />
+      </Modal>
     </View>
   );
 }
@@ -489,7 +493,7 @@ const sheet = StyleSheet.create({
 
 const conflict = StyleSheet.create({
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.5)",
   },
   box: {

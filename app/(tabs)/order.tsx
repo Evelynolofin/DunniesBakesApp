@@ -222,7 +222,9 @@ function OrderDetailModal({
     if (!order) return;
     Alert.alert(
       "Cancel Order",
-      "Are you sure you want to cancel this order? This cannot be undone.",
+      order.paymentMethod === "wallet" || order.paymentMethod === "paystack"
+        ? "Are you sure you want to cancel this order? This cannot be undone. You'll be refunded to your wallet."
+        : "Are you sure you want to cancel this order? This cannot be undone.",
       [
         { text: "Keep Order", style: "cancel" },
         {
@@ -364,6 +366,15 @@ function OrderDetailModal({
               </Text>
             </View>
           </View>
+
+          {order.status === "cancelled" && order.refund && (
+            <View style={detail.refundBox}>
+              <Ionicons name="wallet-outline" size={18} color="#16A34A" />
+              <Text style={detail.refundText}>
+                ₦{order.refund.amount.toLocaleString()} was refunded to your wallet.
+              </Text>
+            </View>
+          )}
 
           {canCancel && (
             <TouchableOpacity
@@ -510,7 +521,8 @@ export default function OrdersScreen() {
   }, [load]);
 
   async function handleCancel(id: string) {
-    await orderStore.updateStatus(id, "cancelled");
+    const result = await orderStore.cancelOrder(id);
+    Alert.alert(result.cancelled ? "Order Cancelled" : "Couldn't Cancel", result.message);
   }
 
   const filtered = orders.filter((o) => {
@@ -527,7 +539,7 @@ export default function OrdersScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" />
 
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Orders</Text>
@@ -750,6 +762,8 @@ const detail = StyleSheet.create({
   divider:     { height: 1, backgroundColor: BORDER, marginVertical: 8 },
   totalLabel:  { fontSize: 16, fontWeight: "700", color: BLACK },
   totalVal:    { fontSize: 16, fontWeight: "700", color: ORANGE },
+  refundBox: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, backgroundColor: "#F0FDF4", borderRadius: 12, marginHorizontal: 20, marginTop: 12 },
+  refundText: { flex: 1, fontSize: 13, color: "#16A34A", fontWeight: "600" },
   cancelBtn: {
     flexDirection: "row",
     alignItems: "center",

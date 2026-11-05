@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
-import { addNotification, getNotificationPrefs } from "@/constants/Notificationservice";
+import { addNotification, getNotificationPrefs, notifyOrderRefund } from "@/constants/Notificationservice";
+import { addTransaction } from "@/constants/Transactionstore";
+import { restoreRedeemedPoints, reverseEarnedPoints } from "@/constants/LoyaltyStore";
 
 export type OrderStatus =
   | "confirmed"
@@ -37,6 +39,22 @@ export type Order = {
   note?: string;
   placedAt: string;
   updatedAt?: string;
+  email?: string;
+  pointsRedeemed?: number;
+  pointsDiscount?: number;
+  refund?: OrderRefund;
+};
+
+export type OrderRefund = {
+  amount: number;
+  destination: "wallet";
+  at: string;
+};
+
+export type CancelResult = {
+  cancelled: boolean;
+  refundedAmount: number;     // 0 when nothing was refunded
+  message: string;            // ready to show the customer
 };
 
 const STATUS_NOTIFICATIONS: Record<
@@ -342,6 +360,98 @@ class OrderStore {
         type:  "order",
         data:  { orderId, screen: "order" },
       });
+    }
+  }
+
+
+  private cancelling = new Set<string>();
+
+  /**
+   * Cancels an order AND refunds it. Wallet and Paystack payments are credited
+   * back to the customer's wallet (card refunds need a server, so the wallet is
+   * the instant route). Bank transfer / cash orders have nothing to auto-refund.
+   * Safe to call twice: the refund is recorded on the order and never repeated.
+   */
+  async cancelOrder(orderId: string): Promise<CancelResult> {
+    if (this.cancelling.has(orderId)) {
+      return { cancelled: false, refundedAmount: 0, message: "Cancellation already in progress." };
+    }
+    this.cancelling.add(orderId);
+    try {
+      const scope = await getUserScope();
+      const all = await this.getAllForScope(scope);
+      const order = all.find((o) => o.id === orderId);
+      if (!order) return { cancelled: false, refundedAmount: 0, message: "Order not found." };
+      if (order.status === "cancelled" && order.refund) {
+        return { cancelled: false, refundedAmount: 0, message: "This order was already cancelled and refunded." };
+      }
+      if (order.status !== "confirmed" && order.status !== "cancelled") {
+        return { cancelled: false, refundedAmount: 0, message: "This order can no longer be cancelled." };
+      }
+
+      if (order.status !== "cancelled") {
+        await this.updateStatus(orderId, "cancelled");
+      }
+
+      const paidOnline = order.paymentMethod === "wallet" || order.paymentMethod === "paystack";
+      const email = await AsyncStorage.getItem(CURRENT_USER_KEY);
+
+      if (!paidOnline) {
+        const msg = order.paymentMethod === "transfer"
+          ? "Order cancelled. If you already sent a bank transfer, contact support with your order reference to get it refunded."
+          : "Order cancelled. You hadn't paid yet, so there's nothing to refund.";
+        return { cancelled: true, refundedAmount: 0, message: msg };
+      }
+      if (!email) {
+        return {
+          cancelled: true, refundedAmount: 0,
+          message: "Order cancelled. Log in to your account and contact support to receive your refund.",
+        };
+      }
+
+      const amount = order.total;
+      const balKey = `wallet_balance_${email}`;
+      const current = Number((await AsyncStorage.getItem(balKey)) ?? 0) || 0;
+      await AsyncStorage.setItem(balKey, String(current + amount));
+
+      await addTransaction(email, {
+        type: "credit",
+        method: "wallet",
+        title: "Order refund",
+        subtitle: `Cancelled order · ${order.reference}`,
+        amount,
+        reference: `REFUND_${order.reference}`,
+        orderRef: order.reference,
+      });
+
+      if ((order.pointsRedeemed ?? 0) > 0) {
+        await restoreRedeemedPoints(email, order.pointsRedeemed!, order.reference);
+      }
+      await reverseEarnedPoints(email, order.total, order.reference);
+
+      // record the refund on the order so it can never be paid out twice
+      const fresh = await this.getAllForScope(scope);
+      const idx = fresh.findIndex((o) => o.id === orderId);
+      if (idx !== -1) {
+        fresh[idx] = {
+          ...fresh[idx],
+          refund: { amount, destination: "wallet", at: new Date().toISOString() },
+        };
+        await this.saveForScope(scope, fresh);
+        this.notify();
+      }
+
+      notifyOrderRefund(amount, order.reference).catch(() => {});
+      return {
+        cancelled: true,
+        refundedAmount: amount,
+        message: `Order cancelled. ₦${amount.toLocaleString()} has been refunded to your wallet.`,
+      };
+    } catch (e) {
+      console.log("[OrderStore.cancelOrder] failed", e);
+      return { cancelled: false, refundedAmount: 0, message: "Couldn't cancel the order. Please try again." };
+    } finally {
+      this.cancelling.delete(orderId);
     }
   }
 

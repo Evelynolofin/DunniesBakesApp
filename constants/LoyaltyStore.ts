@@ -61,32 +61,20 @@ async function addHistoryEntry(
   return item;
 }
 
-/** Pure calculation — how many points a given amount would earn (0 if under the threshold). */
 export function calculateEarnedPoints(amount: number): number {
   if (amount < LOYALTY_EARN_THRESHOLD) return 0;
   return Math.floor(amount / LOYALTY_EARN_RATE);
 }
 
-/** Converts a points amount into its naira discount value. */
 export function pointsToNaira(points: number): number {
   return Math.round(points * LOYALTY_REDEEM_RATE);
 }
 
-/**
- * Max points redeemable against a given subtotal — capped by both the
- * user's balance and the max-redeem percentage rule.
- */
 export function maxRedeemablePoints(subtotal: number, availablePoints: number): number {
   const capByOrder = Math.floor((subtotal * LOYALTY_MAX_REDEEM_PERCENT) / LOYALTY_REDEEM_RATE);
   return Math.max(0, Math.min(availablePoints, capByOrder));
 }
 
-/**
- * Awards points for a completed order. Call this with the amount the
- * customer actually paid (after any points discount was applied) — not the
- * pre-discount subtotal — so redeeming points doesn't let someone farm more
- * points than they paid for.
- */
 export async function earnPointsForOrder(
   email: string,
   amountPaid: number,
@@ -108,10 +96,6 @@ export async function earnPointsForOrder(
   return earned;
 }
 
-/**
- * Redeems points as a discount on an order. Returns false (and changes
- * nothing) if the balance is insufficient.
- */
 export async function redeemPoints(
   email: string,
   points: number,
@@ -132,4 +116,41 @@ export async function redeemPoints(
   });
   await notifyPointsRedeemed(points, pointsToNaira(points), orderRef);
   return true;
+}
+
+export async function restoreRedeemedPoints(
+  email: string,
+  points: number,
+  orderRef: string
+): Promise<void> {
+  if (points <= 0) return;
+
+  const current = await getPoints(email);
+  await setPoints(email, current + points);
+  await addHistoryEntry(email, {
+    type: "earned",
+    points,
+    title: "Redeemed points restored",
+    subtitle: `Order #${orderRef}`,
+    orderRef,
+  });
+}
+
+export async function reverseEarnedPoints(
+  email: string,
+  amountPaid: number,
+  orderRef: string
+): Promise<void> {
+  const earned = calculateEarnedPoints(amountPaid);
+  if (earned <= 0) return;
+
+  const current = await getPoints(email);
+  await setPoints(email, Math.max(0, current - earned));
+  await addHistoryEntry(email, {
+    type: "redeemed",
+    points: earned,
+    title: "Earned points reversed",
+    subtitle: `Order #${orderRef}`,
+    orderRef,
+  });
 }

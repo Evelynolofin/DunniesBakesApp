@@ -225,7 +225,7 @@ export default function NotificationsScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" />
 
       <View style={styles.header}>
         <View>

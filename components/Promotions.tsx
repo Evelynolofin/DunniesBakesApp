@@ -79,7 +79,7 @@ export default function PromotionsScreen({ onClose = () => router.back() }: { on
 
   return (
     <View style={styles.root}>
-      <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" />
 
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) + 10 }]}>
         <TouchableOpacity onPress={onClose} style={styles.backBtn}>

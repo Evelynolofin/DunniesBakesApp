@@ -13,6 +13,8 @@ import {
   Dimensions,
   StatusBar,
   Pressable,
+  PanResponder,
+  Modal,
   Alert,
   AppState,
   AppStateStatus,
@@ -78,10 +80,45 @@ const DRAWER_ITEMS: DrawerItem[] = [
     onOpenLoyalty: () => void;
     onOpenPaymentMethods: () => void;
   }) {
+  const onCloseRef = React.useRef(onClose);
+  onCloseRef.current = onClose;
+
+  // swipe left on the drawer (or the dimmed area) to close it; follows the finger
+  const swipeClose = React.useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) =>
+        g.dx < -8 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderMove: (_, g) => {
+        translateX.setValue(Math.max(-DRAWER_WIDTH, Math.min(0, g.dx)));
+      },
+      onPanResponderRelease: (_, g) => {
+        if (g.dx < -DRAWER_WIDTH / 3 || g.vx < -0.5) {
+          onCloseRef.current();
+        } else {
+          Animated.spring(translateX, {
+            toValue: 0,
+            useNativeDriver: true,
+            bounciness: 0,
+            speed: 20,
+          }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(translateX, {
+          toValue: 0,
+          useNativeDriver: true,
+          bounciness: 0,
+          speed: 20,
+        }).start();
+      },
+    })
+  ).current;
+
   return (
     <>
       {isOpen && (
         <Animated.View
+          {...swipeClose.panHandlers}
           style={[styles.overlay, { opacity: translateX.interpolate({
             inputRange: [-DRAWER_WIDTH, 0],
             outputRange: [0, 0.35],
@@ -92,6 +129,7 @@ const DRAWER_ITEMS: DrawerItem[] = [
         </Animated.View>
       )}
       <Animated.View
+        {...swipeClose.panHandlers}
         style={[
           styles.drawer,
           {
@@ -148,6 +186,7 @@ const DRAWER_ITEMS: DrawerItem[] = [
                 }
 
               if (item.route) {
+                onClose();
                 router.push(item.route);
               }
             }}
@@ -280,12 +319,12 @@ export default function HomeScreen() {
     };
 
     const closeDrawer = () => {
-    Animated.spring(translateX, {
+    setDrawerOpen(false);
+    Animated.timing(translateX, {
         toValue: -DRAWER_WIDTH,
+        duration: 220,
         useNativeDriver: true,
-        bounciness: 0,
-        speed: 20,
-    }).start(() => setDrawerOpen(false)); 
+    }).start(); 
     };
 
     const displayedItems = useMemo(() => {
@@ -433,21 +472,27 @@ export default function HomeScreen() {
             onClose={closeDrawer}
             username={username}
             isOpen={drawerOpen}
-            onOpenLoyalty={() => setLoyaltyVisible(true)}
-            onOpenPaymentMethods={() => setPaymentMethodsVisible(true)}
+            onOpenLoyalty={() => setTimeout(() => setLoyaltyVisible(true), 250)}
+            onOpenPaymentMethods={() => setTimeout(() => setPaymentMethodsVisible(true), 250)}
           />
 
-          {loyaltyVisible && (
-            <View style={StyleSheet.absoluteFillObject}>
-              <LoyaltyPointsScreen onClose={() => setLoyaltyVisible(false)} />
-            </View>
-          )}
+          <Modal
+            visible={loyaltyVisible}
+            animationType="slide"
+            presentationStyle="fullScreen"
+            onRequestClose={() => setLoyaltyVisible(false)}
+          >
+            <LoyaltyPointsScreen onClose={() => setLoyaltyVisible(false)} />
+          </Modal>
 
-          {paymentMethodsVisible && (
-            <View style={StyleSheet.absoluteFillObject}>
-              <PaymentMethodsScreen onClose={() => setPaymentMethodsVisible(false)} />
-            </View>
-          )}
+          <Modal
+            visible={paymentMethodsVisible}
+            animationType="slide"
+            presentationStyle="fullScreen"
+            onRequestClose={() => setPaymentMethodsVisible(false)}
+          >
+            <PaymentMethodsScreen onClose={() => setPaymentMethodsVisible(false)} />
+          </Modal>
       </View>
     )
 }
@@ -457,7 +502,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
 
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "#000",
     zIndex: 10,
   },

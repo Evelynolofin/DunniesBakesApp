@@ -27,7 +27,7 @@ export default function Index() {
 
   return (
     <>
-    <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+    <StatusBar barStyle="dark-content" />
     <View style={{flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F53F05'}}>
       <Image
         source={require("@/assets/images/Avatars.png")}
